@@ -1,0 +1,2 @@
+training_imgless.py learning_rate=0.015, lr_decay = 0.005，在第5个epoch后即发生过拟合，验证集最低平均误差为0.5309；到第9个epoch后验证集的误差又减小了0.4066。20个epoch中最低误差在第18个epoch后的结果0.2813，最后结果0.3146，模型保存在'test_without_imgs2.h5'。加载本次保存模型，继续跑10个epoch后，误差减小到0.2731，保存至'test_without_imgs3.h5'
+'test_without_imgs4.h5'到了0.1858
