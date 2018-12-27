@@ -4,7 +4,7 @@ import numpy as np
 import os
 # import tensorflow as tf
 import pickle
-from keras.models import Model, load_model
+from keras.models import Model, load_model, model_from_json
 from keras.layers import BatchNormalization, Activation, Dense, Input
 from keras.layers.merge import Subtract, Concatenate
 from keras.callbacks import TensorBoard, TerminateOnNaN
@@ -13,9 +13,9 @@ from keras import optimizers, losses
 from processing.DataGenerator import CustomDataGenWthTarCfg
 from train.mdn import *
 
-learning_rate = 2e-3         # 学习率
+learning_rate = 8e-4         # 学习率
 # learning_rate = 0.1
-lr_decay = 2e-3
+lr_decay = 1e-3
 
 
 def model_with_config_n_target():
@@ -61,7 +61,7 @@ def model_with_config_n_target():
     y = Activation('relu', name='final_relu1')(y)
     y = Dense(128, activation='relu', name='final_dense2')(y)
     y = Dense(128, activation='relu', name='final_dense3')(y)
-    N_MIXES = 35
+    N_MIXES = 15
     OUTPUT_DIMS = 6
     final_output = MDN(OUTPUT_DIMS, N_MIXES)(y)
     model = Model(inputs=[config, target, obstacle_posnori],
@@ -91,6 +91,17 @@ def separate_train_test(datapath):
         pickle.dump({'train': train_list, 'test': vali_list}, f)
 
 
+def loadmodeltest():
+    model = model_with_config_n_target()
+    model.load_weights('./h5files/model8_5_weights.h5')
+    config = model.get_config()
+    json_string = model.to_json()
+    #with open('./model_json.pkl', 'wb') as f2:
+    #    pickle.dump(json_string, f2)
+    model2 = model_from_json(json_string)
+    return model2
+
+
 def separate_train_test2(datapath):
     dirlist = os.listdir(datapath)
     id_list = []
@@ -117,7 +128,9 @@ def separate_train_test2(datapath):
 
 
 def train_with_generator(datapath, batch_size, epochs):
-    model = model_with_config_n_target()
+    #model = model_with_config_n_target()
+    #model.load_weights('./h5files/model8_4_weights.h5')
+    model1 = loadmodeltest()
     """h5file = './h5files/model8_0.h5'
     model = load_model(h5file)
     N_MIXES = 20
@@ -139,20 +152,20 @@ def train_with_generator(datapath, batch_size, epochs):
                                       list_IDs=vali_list,
                                       data_size=50,
                                       batch_size=batch_size)
-    history = model.fit_generator(generator=train_gen,
-                        epochs=epochs,
-                        validation_data=vali_gen,
-                        use_multiprocessing=True,
-                        callbacks=[TensorBoard(log_dir='./tensorboard_logs/model8_4/log'), TerminateOnNaN()],
-                        workers=3)
-    weights = model.get_weights()
-    model_config = model.get_config()
-    model.save_weights('./h5files/model8_3_weights.h5')
+    history= model1.fit_generator(generator=train_gen,
+                                  epochs=epochs,
+                                  validation_data=vali_gen,
+                                  use_multiprocessing=True,
+                                  callbacks=[TensorBoard(log_dir='./tensorboard_logs/model8_6/log'), TerminateOnNaN()],
+                                  workers=2)
+
+    #model_config = model.get_config()
+    model1.save_weights('./h5files/model8_6_weights.h5')
     # K.clear_session()
-    model.save('./h5files/model8_3.h5')
+    #model1.save('./h5files/model8_5.h5')
 
 
 if __name__ == '__main__':
     datapath = '/home/czj/vrep_path_dataset/10/'
     #separate_train_test2(datapath)
-    train_with_generator(datapath, 64, 300)
+    train_with_generator(datapath, 64, 100)

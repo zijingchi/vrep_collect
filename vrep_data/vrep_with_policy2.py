@@ -3,7 +3,7 @@ import os
 import cv2
 import time
 import pickle
-from keras.models import load_model
+from train.train_mdn1 import model_with_config_n_target
 from train.mdn import *
 import numpy as np
 
@@ -18,7 +18,7 @@ class UR5WithCameraSample(vrep_env.VrepEnv):
             server_addr='127.0.0.1',
             server_port=19997,
             scene_path=None,
-            modelfile=None
+            modelweights=None
     ):
 
         vrep_env.VrepEnv.__init__(
@@ -48,7 +48,8 @@ class UR5WithCameraSample(vrep_env.VrepEnv):
         self.camera2 = self.get_object_handle('camera2')
         self.goal_viz = self.get_object_handle('Cuboid')
         self.tip = self.get_object_handle('tip')
-        self.model = load_model(modelfile)
+        self.model = model_with_config_n_target()
+        self.model.load_weights(modelweights)
         h = 256
         w = 256
         c = 3
@@ -163,7 +164,7 @@ class UR5WithCameraSample(vrep_env.VrepEnv):
         param = self.model.predict([x1, x2, x3])
         action = sample_from_output(param, 6, 35)
         # action = action[0]
-        action = np.deg2rad(action)
+        action = np.deg2rad(action[0])
         self._make_action(action)  # make the action
         # ask the expert to give the right action if exists (here the expert is the ompl algorithm used in v-rep
         inFloats = config.tolist() + self.target_joint_pos.tolist()
@@ -219,7 +220,7 @@ class UR5WithCameraSample(vrep_env.VrepEnv):
 
 def main(args):
     workpath = '/home/czj/vrep_path_dataset/15/'
-    model_path = '/home/czj/vrep_path_dataset/model8_3.h5'
+    model_weights = '/home/czj/vrep_path_dataset/model8_4_weights.h5'
     if not os.path.exists(workpath):
         os.mkdir(workpath)
     dirlist = os.listdir(workpath)
@@ -229,7 +230,7 @@ def main(args):
     else:
         maxdir = max(numlist)
     os.chdir(workpath)
-    env = UR5WithCameraSample(modelfile=model_path)
+    env = UR5WithCameraSample(modelweights=model_weights)
     for i in range(maxdir + 1, maxdir + 20):
         print('iter:', i)
         collision = env.reset()

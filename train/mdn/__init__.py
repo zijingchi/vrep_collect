@@ -164,6 +164,7 @@ def split_mixture_params(params, output_dim, num_mixes):
     output_dim -- the dimension of the normal models in the mixture model
     num_mixes -- the number of mixtures represented
     """
+    params = params[0]
     mus = params[:num_mixes*output_dim]
     sigs = params[num_mixes*output_dim:2*num_mixes*output_dim]
     pi_logits = params[-num_mixes:]
