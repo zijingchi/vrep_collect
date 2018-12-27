@@ -3,7 +3,6 @@ import os
 import cv2
 import time
 import pickle
-vrep_scenes_path = '/home/ubuntu/vrep340/scenes/'
 
 # import gym
 # from gym import spaces
@@ -138,7 +137,7 @@ class UR5WithCameraSample(vrep_env.VrepEnv):
 
     def step(self, t):
         self._make_observation()
-        next_state = self.path[t+1]
+        next_state = np.append(self.path[t+1], np.array([0]))
         action = next_state - self.observation['joint']
         # print(next_state)
         # print(self.current_state)
@@ -173,16 +172,17 @@ class UR5WithCameraSample(vrep_env.VrepEnv):
             n_path, path, res = self._calPathThroughVrep(clientID, 400, inFloats, emptyBuff)
             if (res == 0) & (n_path != 0):
                 np_path = np.array(path)
-                re_path = np_path.reshape((n_path, 6))
-                thresh = 0.1
-                c0 = np.array(self.init_joint_pos)
+                re_path = np_path.reshape((n_path, 5))
+                # re_path = re_path[:, 0:5]
+                thresh = 0.08
+                c0 = np.array(self.init_joint_pos[:-1])
                 final_path = []
                 for c in re_path:
                     if self.calAngDis(c, c0) > thresh:
                         final_path.append(c)
                         c0 = c
-                if c0.any() != np.array(self.target_joint_pos).any():
-                    final_path.append(np.array(self.target_joint_pos))
+                if c0.any() != np.array(self.target_joint_pos[:-1]).any():
+                    final_path.append(np.array(self.target_joint_pos[:-1]))
                 self.n_path = len(final_path)
                 self.path = final_path
                 # print('obstacle_pos:', self.obstacle_pos)
@@ -200,7 +200,7 @@ class UR5WithCameraSample(vrep_env.VrepEnv):
 
 
 def main(args):
-    workpath = '/home/ubuntu/vrep_path_dataset/16/'
+    workpath = '/home/ubuntu/vrep_path_dataset/20/'
     if not os.path.exists(workpath):
         os.mkdir(workpath)
     dirlist = os.listdir(workpath)
@@ -211,7 +211,7 @@ def main(args):
         maxdir = max(numlist)
     os.chdir(workpath)
     env = UR5WithCameraSample()
-    for i in range(maxdir + 1, maxdir + 20):
+    for i in range(maxdir + 1, maxdir + 200):
         print('iter:', i)
         found = env.reset()
         if found:
