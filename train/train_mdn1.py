@@ -13,14 +13,14 @@ from keras import optimizers, losses
 from processing.DataGenerator import CustomDataGenWthTarCfg
 from train.mdn import *
 
-learning_rate = 8e-4         # 学习率
+learning_rate = 2e-2         # 学习率
 # learning_rate = 0.1
 lr_decay = 1e-3
 
 
 def model_with_config_n_target():
-    config = Input(shape=(6,), name='angles')
-    target = Input(shape=(6,), name='target')
+    config = Input(shape=(5,), name='angles')
+    target = Input(shape=(5,), name='target')
     obstacle_posnori = Input(shape=(6,), name='obstacle_pos')
     x1 = Dense(512, name='config_dense1')(config)
     x1 = BatchNormalization(name='config_bn1')(x1)
@@ -61,8 +61,8 @@ def model_with_config_n_target():
     y = Activation('relu', name='final_relu1')(y)
     y = Dense(128, activation='relu', name='final_dense2')(y)
     y = Dense(128, activation='relu', name='final_dense3')(y)
-    N_MIXES = 15
-    OUTPUT_DIMS = 6
+    N_MIXES = 30
+    OUTPUT_DIMS = 5
     final_output = MDN(OUTPUT_DIMS, N_MIXES)(y)
     model = Model(inputs=[config, target, obstacle_posnori],
                   outputs=final_output)
@@ -77,11 +77,14 @@ def separate_train_test(datapath):
     dirlist = os.listdir(datapath)
     id_list = []
     for d in dirlist:
-        if d[0] == 'd':
-            continue
-        if os.path.isdir(os.path.join(datapath, d)):
-            for i in range(50):
-                id_list.append(d + '-' + str(i))
+        subdir = os.path.join(datapath, d)
+        if os.path.isdir(subdir):
+            datapkl = os.path.join(subdir, 'data.pkl')
+            if os.path.exists(datapkl):
+                with open(datapkl, 'rb') as dataf:
+                    data = pickle.load(dataf)
+                    for i in range(len(data['actions'])):
+                        id_list.append(d + '-' + str(i))
     id_size = len(id_list)
     train_size = int(0.8 * id_size)
     np.random.shuffle(id_list)
@@ -128,17 +131,14 @@ def separate_train_test2(datapath):
 
 
 def train_with_generator(datapath, batch_size, epochs):
-    #model = model_with_config_n_target()
+    model = model_with_config_n_target()
     #model.load_weights('./h5files/model8_4_weights.h5')
-    model1 = loadmodeltest()
-    """h5file = './h5files/model8_0.h5'
-    model = load_model(h5file)
-    N_MIXES = 20
-    OUTPUT_DIMS = 6
+    #model1 = loadmodeltest()
+    """
     model.compile(loss=get_mixture_loss_func(OUTPUT_DIMS, N_MIXES),
                   optimizer=optimizers.Adam(lr=learning_rate, beta_1=0.9, beta_2=0.999, decay=lr_decay),
                   metrics=[get_mixture_mse_accuracy(OUTPUT_DIMS, N_MIXES)])"""
-    # plot_model(model, to_file='model7.jpg', show_shapes=True)
+    plot_model(model, to_file='model9.jpg', show_shapes=True)
     with open(os.path.join(datapath, 'list0.pkl'), 'rb') as f:
         lists = pickle.load(f)
         train_list = lists['train']
@@ -152,20 +152,20 @@ def train_with_generator(datapath, batch_size, epochs):
                                       list_IDs=vali_list,
                                       data_size=50,
                                       batch_size=batch_size)
-    history= model1.fit_generator(generator=train_gen,
+    history= model.fit_generator(generator=train_gen,
                                   epochs=epochs,
                                   validation_data=vali_gen,
                                   use_multiprocessing=True,
-                                  callbacks=[TensorBoard(log_dir='./tensorboard_logs/model8_6/log'), TerminateOnNaN()],
+                                  callbacks=[TensorBoard(log_dir='./tensorboard_logs/model9_1/log'), TerminateOnNaN()],
                                   workers=2)
 
     #model_config = model.get_config()
-    model1.save_weights('./h5files/model8_6_weights.h5')
+    model.save_weights('./h5files/model9_1_weights.h5')
     # K.clear_session()
     #model1.save('./h5files/model8_5.h5')
 
 
 if __name__ == '__main__':
-    datapath = '/home/czj/vrep_path_dataset/10/'
-    #separate_train_test2(datapath)
-    train_with_generator(datapath, 64, 100)
+    datapath = '/home/ubuntu/vrep_path_dataset/21/'
+    separate_train_test(datapath)
+    train_with_generator(datapath, 50, 400)

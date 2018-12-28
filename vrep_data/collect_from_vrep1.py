@@ -139,13 +139,12 @@ class UR5WithCameraSample(vrep_env.VrepEnv):
         self._make_observation()
         next_state = np.append(self.path[t+1], np.array([0]))
         action = next_state - self.observation['joint']
-        # print(next_state)
-        # print(self.current_state)
+        print(np.linalg.norm(action))
         #self.set_joints(next_state)
         self._make_action(action)
         self.step_simulation()
 
-        return self.observation, action
+        return self.observation, action[:-1]
 
     def reset(self):
         if self.sim_running:
@@ -176,7 +175,7 @@ class UR5WithCameraSample(vrep_env.VrepEnv):
                 # re_path = re_path[:, 0:5]
                 thresh = 0.08
                 c0 = np.array(self.init_joint_pos[:-1])
-                final_path = []
+                final_path = [c0]
                 for c in re_path:
                     if self.calAngDis(c, c0) > thresh:
                         final_path.append(c)
@@ -200,7 +199,7 @@ class UR5WithCameraSample(vrep_env.VrepEnv):
 
 
 def main(args):
-    workpath = '/home/ubuntu/vrep_path_dataset/20/'
+    workpath = '/home/ubuntu/vrep_path_dataset/21/'
     if not os.path.exists(workpath):
         os.mkdir(workpath)
     dirlist = os.listdir(workpath)
@@ -211,7 +210,7 @@ def main(args):
         maxdir = max(numlist)
     os.chdir(workpath)
     env = UR5WithCameraSample()
-    for i in range(maxdir + 1, maxdir + 200):
+    for i in range(maxdir + 1, maxdir + 50):
         print('iter:', i)
         found = env.reset()
         if found:
@@ -222,7 +221,7 @@ def main(args):
             acs = []
             for t in range(env.n_path-1):
                 observation, action = env.step(t)
-                obs.append(observation['joint'])
+                obs.append(observation['joint'][:-1])
                 acs.append(action)
                 img1_path = str(i) + "/img1/" + str(t) + ".jpg"
                 img2_path = str(i) + "/img2/" + str(t) + ".jpg"

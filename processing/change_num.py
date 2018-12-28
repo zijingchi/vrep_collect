@@ -1,14 +1,19 @@
 import os
-
-datapath = '/home/czj/vrep_path_dataset/13/'
+"""
+    REMEMBER TO CHECK IF THE DATAPATH IS WHAT YOU EXPECT!!!!!!!!!!
+"""
+datapath = '/home/ubuntu/vrep_path_dataset/22/'
 dirlist = os.listdir(datapath)
-s = 276
+if 'list0.pkl' in dirlist:
+    raise RuntimeError('not the new dataset!')
+s = 203
 numlist = list(range(s, s+len(dirlist)))
 
 try:
     for d, n in zip(dirlist, numlist):
         oldname = os.path.join(datapath, d)
         newname = os.path.join(datapath, 'd'+str(n))
-        os.rename(oldname, newname)
+        if os.path.isdir(oldname):
+            os.rename(oldname, newname)
 except OSError as e:
     print('error rename')

@@ -11,7 +11,7 @@ class CustomDataGenWthImg(keras.utils.Sequence):
         self.data_size = data_size
         self.dim = img_dim
         self.datapath = datapath
-        self.datafromindex = DataFromIndex(datapath, rad2deg=True, load_tar_pos=False)
+        self.datafromindex = DataFromIndex(datapath, rad2deg=True)
         self.list_IDs = list_IDs
         self.indexes = np.arange(len(self.list_IDs))
         self.shuffle = shuffle
@@ -82,9 +82,9 @@ class CustomDataGenWthTarCfg(keras.utils.Sequence):
             np.random.shuffle(self.indexes)
 
     def __data_generation(self, list_IDs_temp):
-        configs = np.empty((self.batch_size, 6), dtype=float)
-        actions = np.empty((self.batch_size, 6), dtype=float)
-        tar_pos_config = np.empty((self.batch_size, 6), dtype=float)
+        configs = np.empty((self.batch_size, 5), dtype=float)
+        actions = np.empty((self.batch_size, 5), dtype=float)
+        tar_pos_config = np.empty((self.batch_size, 5), dtype=float)
         obstacle_posnori = np.empty((self.batch_size, 6), dtype=float)
         #obstacle_pos = np.empty((self.batch_size, 3), dtype=float)
         #obstacle_ori = np.empty((self.batch_size, 3), dtype=float)

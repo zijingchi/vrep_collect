@@ -82,7 +82,7 @@ class UR5WithCameraSample(vrep_env.VrepEnv):
         """send the signal to v-rep and retrieve the path tuple calculated by the v-rep script"""
         maxConfigsForDesiredPose = 10  # we will try to find 10 different states corresponding to the goal pose and order them according to distance from initial state
         maxTrialsForConfigSearch = 300  # a parameter needed for finding appropriate goal states
-        searchCount = 4  # how many times OMPL will run for a given task
+        searchCount = 8  # how many times OMPL will run for a given task
         # minConfigsForPathPlanningPath = 50  # interpolation states for the OMPL path
         minConfigsForIkPath = 100  # interpolation states for the linear approach path
         collisionChecking = 1  # whether collision checking is on or off
@@ -130,11 +130,12 @@ class UR5WithCameraSample(vrep_env.VrepEnv):
         self.obj_set_orientation(self.goal_viz, tip_ori)
         self.obstacle_pos = 0.8 * np.array(tip_pos) + np.array([0.1*(0.5-np.random.rand()),
                                                                 0.1-0.15*np.random.rand(),
-                                                                0.3+0.2*(0.5-np.random.rand())])
+                                                                0.3+0.1*(0.5-np.random.rand())])
+        self.obstacle_pos[2] = 0.45 + 0.1*(0.5-np.random.rand())
         # self.obstacle_pos = [0.15*np.random.randn()-0.1, 0.2*np.random.randn()-0.45, 0.1*np.random.randn()+0.42]
         # self.obstacle_pos = np.array(self.obstacle_pos)
         self.obj_set_position(self.obstable, self.obstacle_pos)
-        self.obstacle_ori = 0.3*np.random.rand(3)
+        self.obstacle_ori = 0.2*np.random.rand(3)
         self.obj_set_orientation(self.obstable, self.obstacle_ori)
         emptyBuff = bytearray()
         colcheck1 = self._checkInitCollision(self.cID, emptyBuff)
@@ -153,24 +154,24 @@ class UR5WithCameraSample(vrep_env.VrepEnv):
     def step(self, t):
         self._make_observation()    # make an observation
         # predict the action from the model
-        config = self.observation['joint']
+        config = self.observation['joint'][:-1]
         x1 = self._transpose(np.rad2deg(config))
-        x2 = self._transpose(np.rad2deg(self.target_joint_pos))
+        x2 = self._transpose(np.rad2deg(self.target_joint_pos[:-1]))
         x3 = self._transpose(np.concatenate((self.obstacle_pos, self.obstacle_ori)))
         action = self.model.predict([x1, x2, x3])
         #action = action[0]
-        action = np.deg2rad(action[0])
+        action = np.deg2rad(np.append(action[0], np.zeros(1)))
         self._make_action(action)   # make the action
         # ask the expert to give the right action if exists (here the expert is the ompl algorithm used in v-rep
-        inFloats = config.tolist() + self.target_joint_pos.tolist()
-        minConfigs = int(60 * np.linalg.norm(self.target_joint_pos - config) / 1.35)
+        inFloats = np.append(config, np.zeros(1)).tolist() + self.target_joint_pos.tolist()
+        minConfigs = int(200 * np.linalg.norm(self.target_joint_pos[:-1] - config))
         emptyBuff = bytearray()
         n_path, path, res = self._calPathThroughVrep(self.cID, minConfigs, inFloats, emptyBuff)
-        thresh = 0.06
+        thresh = 0.08
         expert_action = []
         if (res == 0) & (n_path != 0):
             np_path = np.array(path)
-            re_path = np_path.reshape((n_path, 6))
+            re_path = np_path.reshape((n_path, 5))
             for p in re_path:
                 n = np.linalg.norm(p - config)
                 if n > thresh:
@@ -179,7 +180,7 @@ class UR5WithCameraSample(vrep_env.VrepEnv):
         if res == 3:
             time.sleep(3)
         colcheck = self._checkInitCollision(self.cID, emptyBuff)
-        amp_between = np.linalg.norm(self.target_joint_pos - config)
+        amp_between = np.linalg.norm(self.target_joint_pos[:-1] - config)
         check = (amp_between < 0.2) or (colcheck == 1) or (expert_action == [])
         self.step_simulation()
 
@@ -191,8 +192,8 @@ class UR5WithCameraSample(vrep_env.VrepEnv):
         while self.sim_running:
             self.stop_simulation()
 
-        self.target_joint_pos = np.array([0.2*np.random.randn(), 0.1*np.random.randn()-pi/3, 
-        0.2*np.random.randn()-pi/3, 0.3*np.random.randn(), 0.2*np.random.randn()+pi/2, 0])
+        self.target_joint_pos = np.array([0.2*np.random.randn(), 0.1*np.random.randn()-pi/4,
+        0.2*np.random.randn()-pi/3, 0.4*np.random.randn(), 0.2*np.random.randn()+pi/2, 0])
         
         self.start_simulation()
         colcheck = self.set_obs_pos()
@@ -213,8 +214,8 @@ class UR5WithCameraSample(vrep_env.VrepEnv):
 
 
 def main(args):
-    workpath = '/home/czj/vrep_path_dataset/13/'
-    model_path = '/home/czj/vrep_path_dataset/model7_dagger13.h5'
+    workpath = '/home/ubuntu/vrep_path_dataset/22/'
+    model_path = '/home/ubuntu/vrep_path_dataset/model6_2.h5'
     if not os.path.exists(workpath):
         os.mkdir(workpath)
     dirlist = os.listdir(workpath)
@@ -225,7 +226,7 @@ def main(args):
         maxdir = max(numlist)
     os.chdir(workpath)
     env = UR5WithCameraSample(modelfile=model_path)
-    for i in range(maxdir+1, maxdir+200):
+    for i in range(maxdir+1, maxdir+100):
         print('iter:', i)
         collision = env.reset()
         if collision:
@@ -240,7 +241,7 @@ def main(args):
                 action, expert_action, check = env.step(t)
                 if check:
                     break
-                obs.append(env.observation['joint'])
+                obs.append(env.observation['joint'][:-1])
                 cv2.imwrite(str(i)+'/img1/'+str(t)+'.jpg', env.observation['image1'])
                 cv2.imwrite(str(i)+'/img2/'+str(t)+'.jpg', env.observation['image2'])
                 acs.append(action)
@@ -251,7 +252,7 @@ def main(args):
                 with open(str(i)+'/data.pkl', 'wb') as f:
                     pickle.dump(data, f)
         else:
-            print("collision at target pose")
+            print("collision at initial or target pose")
     # print("Episode finished after {} timesteps.\tTotal reward: {}".format(t+1,total_reward))
     env.close()
     return 0

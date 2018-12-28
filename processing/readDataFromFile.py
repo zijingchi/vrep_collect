@@ -222,6 +222,7 @@ class DataFromIndex(object):
         dirname = reindex[0]
         datadir = os.path.join(self.path, dirname)
         flagd = (dirname[0] == 'd')
+        flagd = False
         t = int(reindex[1])
         pkl_path = os.path.join(datadir, 'data.pkl')
         img1_path = os.path.join(datadir, 'img1/' + reindex[1] + '.jpg')
@@ -239,7 +240,7 @@ class DataFromIndex(object):
             obs = pkl_data['observations']
             # config = obs[t]['joint']
             config = obs[t]
-            tar_pos = np.array(inits['target_joint_pos'])
+            tar_pos = np.array(inits['target_joint_pos'][:-1])
             if self.load_depth:
                 observation['depth'] = obs[t]['depth']
             obstacle_pos = np.array(inits['obstacle_pos'])
