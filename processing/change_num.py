@@ -2,11 +2,11 @@ import os
 """
     REMEMBER TO CHECK IF THE DATAPATH IS WHAT YOU EXPECT!!!!!!!!!!
 """
-datapath = '/home/ubuntu/vrep_path_dataset/22/'
+datapath = '/home/czj/vrep_path_dataset/16_2/'
 dirlist = os.listdir(datapath)
 if 'list0.pkl' in dirlist:
     raise RuntimeError('not the new dataset!')
-s = 203
+s = 186
 numlist = list(range(s, s+len(dirlist)))
 
 try:

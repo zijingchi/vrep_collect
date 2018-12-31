@@ -11,9 +11,9 @@ from keras.utils import plot_model
 from keras import optimizers, losses
 from processing.DataGenerator import CustomDataGenWthTarCfg
 
-learning_rate = 1e-2        # 学习率
+learning_rate = 2e-2        # 学习率
 # learning_rate = 0.1
-lr_decay = 1e-3
+lr_decay = 5e-3
 
 
 def model_with_config_n_target(dof):
@@ -86,24 +86,23 @@ def separate_train_test2(datapath):
     np.random.shuffle(id_list)
     train_list = id_list[:train_size]
     vali_list = id_list[train_size:]
-    """with open(os.path.join(datapath, 'list0.pkl'), 'rb') as f0:
+    with open(os.path.join(datapath, 'list1.pkl'), 'rb') as f0:
         list0 = pickle.load(f0)
         train_list = train_list + list0['train']
-        vali_list = vali_list + list0['test']"""
-    with open(os.path.join(datapath, 'list0.pkl'), 'wb') as f1:
+        vali_list = vali_list + list0['test']
+    with open(os.path.join(datapath, 'list2.pkl'), 'wb') as f1:
         pickle.dump({'train': train_list, 'test': vali_list}, f1)
 
 
 def train_with_generator(datapath, batch_size, epochs):
-    #model = model_with_config_n_target(5)
-    h5file = '../train/h5files/model6_5.h5'
+    model = model_with_config_n_target(5)
+    h5file = '../train/h5files/5dof_model1_21.h5'
     model = load_model(h5file)
-
     model.compile(loss=losses.logcosh,
-                  optimizer=optimizers.Adam(lr=3e-4, beta_1=0.9, beta_2=0.999, decay=1e-3),
+                  optimizer=optimizers.Adam(lr=1e-4, beta_1=0.9, beta_2=0.999, decay=1e-3),
                   metrics=['mae'])
-    # plot_model(model, to_file='model5.jpg', show_shapes=True)
-    with open(os.path.join(datapath, 'list0.pkl'), 'rb') as f:
+    #plot_model(model, to_file='5dof_model1.jpg', show_shapes=True)
+    with open(os.path.join(datapath, 'list2.pkl'), 'rb') as f:
         lists = pickle.load(f)
         train_list = lists['train']
         vali_list = lists['test']
@@ -119,12 +118,12 @@ def train_with_generator(datapath, batch_size, epochs):
                         epochs=epochs,
                         validation_data=vali_gen,
                         use_multiprocessing=True,
-                        callbacks=[TensorBoard(log_dir='./tensorboard_logs/model6_1/log')],
+                        callbacks=[TensorBoard(log_dir='./tensorboard_logs/5dof_model1_5/log')],
                         workers=2)
-    model.save('./h5files/model6_6.h5')
+    model.save('./h5files/5dof_model1_23.h5')
 
 
 if __name__ == '__main__':
-    datapath = '/home/ubuntu/vrep_path_dataset/21/'
+    datapath = '/home/czj/vrep_path_dataset/16/'
     #separate_train_test2(datapath)
-    train_with_generator(datapath, 64, 400)
+    train_with_generator(datapath, 64, 300)

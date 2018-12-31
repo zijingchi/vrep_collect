@@ -51,7 +51,7 @@ class UR5WithCameraSample(vrep_env.VrepEnv):
         self.tip = self.get_object_handle('tip')
         self.init_joint_pos = [0, -pi / 12, -2 * pi / 3, 0, pi / 2, 0]
         for i in range(len(self.init_joint_pos)):
-            self.init_joint_pos[i] = self.init_joint_pos[i] + 0.02 * np.random.randn()
+            self.init_joint_pos[i] = self.init_joint_pos[i] + 0.05 * np.random.randn()
         h = 256
         w = 256
         c = 3
@@ -119,12 +119,13 @@ class UR5WithCameraSample(vrep_env.VrepEnv):
         self.obj_set_position(self.goal_viz, tip_pos)
         self.obj_set_orientation(self.goal_viz, tip_ori)
         # obstacle_pos = tip_pos + 0.2*(np.random.rand(3) + np.array([-3.3, 1.1, -0.3]))
-        self.obstacle_pos = 0.75*np.array(tip_pos) + np.array([0.2*np.random.randn(),
-                                                              0.2*(0.5-np.random.rand()),
-                                                              0.3+0.2*np.random.rand()])
+        self.obstacle_pos = 0.75*np.array(tip_pos) + np.array([0.1*np.random.randn(),
+                                                              0.1+0.1*(0.5-np.random.rand()),
+                                                              0.15+0.1*np.random.rand()])
+        #self.obstacle_pos[2] = 0.35 + 0.2*np.random.rand()
         self.obstacle_pos = np.array(self.obstacle_pos)
         self.obj_set_position(self.obstable, self.obstacle_pos)
-        self.obstacle_ori = 0.5 * np.random.rand(3)
+        self.obstacle_ori = 0.2 * np.random.rand(3)
         self.obj_set_orientation(self.obstable, self.obstacle_ori)
         emptyBuff = bytearray()
         colcheck1 = self._checkInitCollision(self.cID, emptyBuff)
@@ -151,14 +152,15 @@ class UR5WithCameraSample(vrep_env.VrepEnv):
             self.stop_simulation()
         while self.sim_running:
             self.stop_simulation()
-        self.target_joint_pos = [0.2 * np.random.randn(), 0.1 * np.random.randn() - pi / 3,
-                                0.2 * np.random.randn() - pi / 3, 0.3 * np.random.randn(),
+        self.target_joint_pos = [0.2 * np.random.randn(), 0.1 * np.random.randn() - pi / 4,
+                                0.2 * np.random.randn() - pi / 4, 0.3 * np.random.randn(),
                                 0.2 * np.random.randn() + pi / 2, 0]
         self.start_simulation()
         found = False
 
         colcheck = self.set_obs_pos()
         self.inits = {'target_joint_pos': np.array(self.target_joint_pos),
+                      'init_joint_pos': np.array(self.init_joint_pos),
                       'obstacle_pos': np.array(self.obstacle_pos),
                       'obstacle_ori': self.obstacle_ori}
         if colcheck == 1:
@@ -199,7 +201,10 @@ class UR5WithCameraSample(vrep_env.VrepEnv):
 
 
 def main(args):
-    workpath = '/home/ubuntu/vrep_path_dataset/21/'
+    path0 = os.getcwd()
+    hi = path0.find('home') + 5
+    homepath = path0[:path0.find('/', hi)]
+    workpath = homepath + '/vrep_path_dataset/16/'
     if not os.path.exists(workpath):
         os.mkdir(workpath)
     dirlist = os.listdir(workpath)

@@ -58,7 +58,7 @@ class UR5WithCameraSample(vrep_env.VrepEnv):
         self.img_size = [h, w, c]
         #self.target_joint_pos = [-pi/4, -pi/4, -pi/3, pi/8, pi/4, 0]
         
-        self.init_joint_pos = np.array([0, -pi/12, -2*pi/3, 0, pi/2, 0]) + 0.01*np.random.randn(6)
+        self.init_joint_pos = np.array([0, -pi/12, -2*pi/3, 0, pi/2, 0]) + 0.1*np.random.randn(6)
         # Actuators
         self.oh_joint = list(map(self.get_object_handle, ur5_joints))
 
@@ -110,6 +110,7 @@ class UR5WithCameraSample(vrep_env.VrepEnv):
         """Send action to v-rep
         """
         newa = a + self.observation['joint']
+        print(a)
         self._set_joints(newa)
 
     def _cal_depth(self, chandle, zfar, znear):
@@ -128,10 +129,10 @@ class UR5WithCameraSample(vrep_env.VrepEnv):
         tip_ori = self.obj_get_orientation(self.tip)
         self.obj_set_position(self.goal_viz, tip_pos)
         self.obj_set_orientation(self.goal_viz, tip_ori)
-        self.obstacle_pos = 0.8 * np.array(tip_pos) + np.array([0.1*(0.5-np.random.rand()),
-                                                                0.1-0.15*np.random.rand(),
-                                                                0.3+0.1*(0.5-np.random.rand())])
-        self.obstacle_pos[2] = 0.45 + 0.1*(0.5-np.random.rand())
+        self.obstacle_pos = 0.75 * np.array(tip_pos) + np.array([0.1*np.random.randn(),
+                                                                0.15 + 0.1 * np.random.randn(),
+                                                                0.15 + 0.05 * np.random.randn()])
+        # self.obstacle_pos[2] = 0.4 + 0.1*np.random.randn()
         # self.obstacle_pos = [0.15*np.random.randn()-0.1, 0.2*np.random.randn()-0.45, 0.1*np.random.randn()+0.42]
         # self.obstacle_pos = np.array(self.obstacle_pos)
         self.obj_set_position(self.obstable, self.obstacle_pos)
@@ -178,7 +179,8 @@ class UR5WithCameraSample(vrep_env.VrepEnv):
                     expert_action = p - config
                     break
         if res == 3:
-            time.sleep(3)
+            print('timeout')
+            time.sleep(6)
         colcheck = self._checkInitCollision(self.cID, emptyBuff)
         amp_between = np.linalg.norm(self.target_joint_pos[:-1] - config)
         check = (amp_between < 0.2) or (colcheck == 1) or (expert_action == [])
@@ -193,7 +195,7 @@ class UR5WithCameraSample(vrep_env.VrepEnv):
             self.stop_simulation()
 
         self.target_joint_pos = np.array([0.2*np.random.randn(), 0.1*np.random.randn()-pi/4,
-        0.2*np.random.randn()-pi/3, 0.4*np.random.randn(), 0.2*np.random.randn()+pi/2, 0])
+        0.2*np.random.randn()-pi/3, 0.3*np.random.randn(), 0.2*np.random.randn()+pi/2, 0])
         
         self.start_simulation()
         colcheck = self.set_obs_pos()
@@ -214,8 +216,12 @@ class UR5WithCameraSample(vrep_env.VrepEnv):
 
 
 def main(args):
-    workpath = '/home/ubuntu/vrep_path_dataset/22/'
-    model_path = '/home/ubuntu/vrep_path_dataset/model6_2.h5'
+    path0 = os.getcwd()
+    hi = path0.find('home') + 5
+    homepath = path0[:path0.find('/', hi)]
+    workpath = homepath+'/vrep_path_dataset/16_3/'
+    path1 = path0[:path0.rfind('/')]
+    model_path = os.path.join(path1, 'train/h5files/5dof_model1_23.h5')
     if not os.path.exists(workpath):
         os.mkdir(workpath)
     dirlist = os.listdir(workpath)
@@ -226,7 +232,7 @@ def main(args):
         maxdir = max(numlist)
     os.chdir(workpath)
     env = UR5WithCameraSample(modelfile=model_path)
-    for i in range(maxdir+1, maxdir+100):
+    for i in range(maxdir+1, maxdir+250):
         print('iter:', i)
         collision = env.reset()
         if collision:

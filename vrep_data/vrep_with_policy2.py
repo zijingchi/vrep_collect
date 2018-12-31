@@ -172,7 +172,7 @@ class UR5WithCameraSample(vrep_env.VrepEnv):
         emptyBuff = bytearray()
         n_path, path, res = self._calPathThroughVrep(self.cID, minConfigs, inFloats, emptyBuff)
         thresh = 0.06
-        expert_action = []
+        expert_action = -1
         if (res == 0) & (n_path != 0):
             np_path = np.array(path)
             re_path = np_path.reshape((n_path, 6))
@@ -185,7 +185,7 @@ class UR5WithCameraSample(vrep_env.VrepEnv):
             time.sleep(3)
         colcheck = self._checkInitCollision(self.cID, emptyBuff)
         amp_between = np.linalg.norm(self.target_joint_pos - config)
-        check = (amp_between < 0.2) or (colcheck == 1) or (expert_action == [])
+        check = (amp_between < 0.2) or (colcheck == 1) or (expert_action == -1)
         self.step_simulation()
 
         return action, expert_action, check

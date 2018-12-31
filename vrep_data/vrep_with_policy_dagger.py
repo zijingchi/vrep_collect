@@ -141,7 +141,7 @@ class UR5WithCameraDagger(vrep_env.VrepEnv):
 
 
 def main(args):
-    workpath = '/home/ubuntu/vrep_path_dataset/9/'
+    workpath = '/home/czj/vrep_path_dataset/16/'
     if not os.path.exists(workpath):
         raise RuntimeError('directory does not exist!')
     dirlist = os.listdir(workpath)
