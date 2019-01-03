@@ -129,11 +129,11 @@ class UR5WithCameraSample(vrep_env.VrepEnv):
         tip_ori = self.obj_get_orientation(self.tip)
         self.obj_set_position(self.goal_viz, tip_pos)
         self.obj_set_orientation(self.goal_viz, tip_ori)
+
         self.obstacle_pos = 0.75 * np.array(tip_pos) + np.array([0.1*np.random.randn(),
                                                                 0.15 + 0.1 * np.random.randn(),
                                                                 0.15 + 0.05 * np.random.randn()])
         # self.obstacle_pos[2] = 0.4 + 0.1*np.random.randn()
-        # self.obstacle_pos = [0.15*np.random.randn()-0.1, 0.2*np.random.randn()-0.45, 0.1*np.random.randn()+0.42]
         # self.obstacle_pos = np.array(self.obstacle_pos)
         self.obj_set_position(self.obstable, self.obstacle_pos)
         self.obstacle_ori = 0.2*np.random.rand(3)
@@ -216,12 +216,14 @@ class UR5WithCameraSample(vrep_env.VrepEnv):
 
 
 def main(args):
+
     path0 = os.getcwd()
     hi = path0.find('home') + 5
     homepath = path0[:path0.find('/', hi)]
-    workpath = homepath+'/vrep_path_dataset/16_3/'
+    workpath = homepath+'/vrep_path_dataset/1/'
     path1 = path0[:path0.rfind('/')]
     model_path = os.path.join(path1, 'train/h5files/5dof_model1_23.h5')
+
     if not os.path.exists(workpath):
         os.mkdir(workpath)
     dirlist = os.listdir(workpath)
@@ -232,6 +234,7 @@ def main(args):
         maxdir = max(numlist)
     os.chdir(workpath)
     env = UR5WithCameraSample(modelfile=model_path)
+
     for i in range(maxdir+1, maxdir+250):
         print('iter:', i)
         collision = env.reset()
