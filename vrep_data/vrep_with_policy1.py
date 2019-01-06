@@ -4,6 +4,8 @@ import cv2
 import time
 import pickle
 from keras.models import load_model
+from train.train3 import model_with_latentspace
+from processing.angle_dis import obs_pt, config_dis
 #import keras.backend as K
 # import gym
 # from gym import spaces
@@ -35,7 +37,7 @@ class UR5WithCameraSample(vrep_env.VrepEnv):
         self.random_start = False
 
         # All joints
-        ur5_joints = ['UR5_joint1', 'UR5_joint2', 'UR5_joint3', 'UR5_joint4', 'UR5_joint5', 'UR5_joint6']
+        ur5_joints = ['UR5_joint1', 'UR5_joint2', 'UR5_joint3', 'UR5_joint4', 'UR5_joint5']
         # All shapes
         # ur5_links_visible = ['UR5_link1_visible','UR5_link2_visible','UR5_link3_visible',
         #	'UR5_link4_visible','UR5_link5_visible','UR6_link1_visible','UR5_link7_visible']
@@ -51,14 +53,15 @@ class UR5WithCameraSample(vrep_env.VrepEnv):
         self.camera2 = self.get_object_handle('camera2')
         self.goal_viz = self.get_object_handle('Cuboid')
         self.tip = self.get_object_handle('tip')
-        self.model = load_model(modelfile)
+        self.model = model_with_latentspace(5)
+        self.model.load_weights(modelfile)
         h = 256
         w = 256
         c = 3
         self.img_size = [h, w, c]
         #self.target_joint_pos = [-pi/4, -pi/4, -pi/3, pi/8, pi/4, 0]
         
-        self.init_joint_pos = np.array([0, -pi/12, -2*pi/3, 0, pi/2, 0]) + 0.1*np.random.randn(6)
+        self.init_joint_pos = np.array([0, -pi/12, -2*pi/3, 0, pi/2]) + 0.1*np.random.randn(5)
         # Actuators
         self.oh_joint = list(map(self.get_object_handle, ur5_joints))
 
@@ -147,6 +150,30 @@ class UR5WithCameraSample(vrep_env.VrepEnv):
         else:
             return 0
 
+    def set_obs_pos2(self):
+        self._set_joints(self.init_joint_pos)
+        tip_pos = self.obj_get_position(self.tip)
+        self.obstacle_pos = 1.2*np.array(tip_pos) + np.array([0.1 * np.random.randn(),
+                                                              -0.15 + 0.1 * (0.5 - np.random.rand()),
+                                                              0.05 + 0.15 * np.random.rand()])
+        # self.obstacle_pos[2] = 0.35 + 0.2*np.random.rand()
+        self.obj_set_position(self.obstable, self.obstacle_pos)
+        self.obstacle_ori = 0.2 * np.random.rand(3)
+        self.obj_set_orientation(self.obstable, self.obstacle_ori)
+        emptyBuff = bytearray()
+        colcheck1 = self._checkInitCollision(self.cID, emptyBuff)
+
+        self._set_joints(self.target_joint_pos)
+        tip_pos = self.obj_get_position(self.tip)
+        tip_ori = self.obj_get_orientation(self.tip)
+        self.obj_set_position(self.goal_viz, tip_pos)
+        self.obj_set_orientation(self.goal_viz, tip_ori)
+        colcheck2 = self._checkInitCollision(self.cID, emptyBuff)
+        if ((colcheck1 == 0) & (colcheck2 == 0)):
+            return 1
+        else:
+            return 0
+
     def _transpose(self, nparray):
         m = np.mat(nparray).T
         m.shape = (1, nparray.size)
@@ -155,17 +182,18 @@ class UR5WithCameraSample(vrep_env.VrepEnv):
     def step(self, t):
         self._make_observation()    # make an observation
         # predict the action from the model
-        config = self.observation['joint'][:-1]
+        config = self.observation['joint']
         x1 = self._transpose(np.rad2deg(config))
-        x2 = self._transpose(np.rad2deg(self.target_joint_pos[:-1]))
-        x3 = self._transpose(np.concatenate((self.obstacle_pos, self.obstacle_ori)))
+        x2 = self._transpose(np.rad2deg(self.target_joint_pos))
+        #x3 = self._transpose(np.concatenate((self.obstacle_pos, self.obstacle_ori)))
+        x3 = obs_pt(self.obstacle_pos, self.obstacle_ori)
         action = self.model.predict([x1, x2, x3])
         #action = action[0]
-        action = np.deg2rad(np.append(action[0], np.zeros(1)))
+        action = np.deg2rad(action[0])
         self._make_action(action)   # make the action
         # ask the expert to give the right action if exists (here the expert is the ompl algorithm used in v-rep
-        inFloats = np.append(config, np.zeros(1)).tolist() + self.target_joint_pos.tolist()
-        minConfigs = int(200 * np.linalg.norm(self.target_joint_pos[:-1] - config))
+        inFloats = config.tolist() + self.target_joint_pos.tolist()
+        minConfigs = int(200 * np.linalg.norm(self.target_joint_pos - config))
         emptyBuff = bytearray()
         n_path, path, res = self._calPathThroughVrep(self.cID, minConfigs, inFloats, emptyBuff)
         thresh = 0.08
@@ -174,7 +202,7 @@ class UR5WithCameraSample(vrep_env.VrepEnv):
             np_path = np.array(path)
             re_path = np_path.reshape((n_path, 5))
             for p in re_path:
-                n = np.linalg.norm(p - config)
+                n = config_dis(p, config)
                 if n > thresh:
                     expert_action = p - config
                     break
@@ -182,7 +210,7 @@ class UR5WithCameraSample(vrep_env.VrepEnv):
             print('timeout')
             time.sleep(6)
         colcheck = self._checkInitCollision(self.cID, emptyBuff)
-        amp_between = np.linalg.norm(self.target_joint_pos[:-1] - config)
+        amp_between = np.linalg.norm(self.target_joint_pos - config)
         check = (amp_between < 0.2) or (colcheck == 1) or (expert_action == [])
         self.step_simulation()
 
@@ -195,7 +223,7 @@ class UR5WithCameraSample(vrep_env.VrepEnv):
             self.stop_simulation()
 
         self.target_joint_pos = np.array([0.2*np.random.randn(), 0.1*np.random.randn()-pi/4,
-        0.2*np.random.randn()-pi/3, 0.3*np.random.randn(), 0.2*np.random.randn()+pi/2, 0])
+        0.2*np.random.randn()-pi/3, 0.3*np.random.randn(), 0.2*np.random.randn()+pi/2])
         
         self.start_simulation()
         colcheck = self.set_obs_pos()
@@ -219,9 +247,9 @@ def main(args):
     path0 = os.getcwd()
     hi = path0.find('home') + 5
     homepath = path0[:path0.find('/', hi)]
-    workpath = homepath+'/vrep_path_dataset/16_3/'
+    workpath = homepath+'/vrep_path_dataset/16_4/'
     path1 = path0[:path0.rfind('/')]
-    model_path = os.path.join(path1, 'train/h5files/5dof_model1_23.h5')
+    model_path = os.path.join(path1, 'train/h5files/5dof_latent_weights2.h5')
     if not os.path.exists(workpath):
         os.mkdir(workpath)
     dirlist = os.listdir(workpath)
@@ -247,7 +275,7 @@ def main(args):
                 action, expert_action, check = env.step(t)
                 if check:
                     break
-                obs.append(env.observation['joint'][:-1])
+                obs.append(env.observation['joint'])
                 cv2.imwrite(str(i)+'/img1/'+str(t)+'.jpg', env.observation['image1'])
                 cv2.imwrite(str(i)+'/img2/'+str(t)+'.jpg', env.observation['image2'])
                 acs.append(action)
