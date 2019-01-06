@@ -85,7 +85,7 @@ class CustomDataGenWthTarCfg(keras.utils.Sequence):
         configs = np.empty((self.batch_size, 5), dtype=float)
         actions = np.empty((self.batch_size, 5), dtype=float)
         tar_pos_config = np.empty((self.batch_size, 5), dtype=float)
-        obstacle_posnori = np.empty((self.batch_size, 6), dtype=float)
+        obstacle_posnori = np.empty((self.batch_size, 24), dtype=float)
         #obstacle_pos = np.empty((self.batch_size, 3), dtype=float)
         #obstacle_ori = np.empty((self.batch_size, 3), dtype=float)
 
@@ -93,8 +93,7 @@ class CustomDataGenWthTarCfg(keras.utils.Sequence):
             obs, act = self.datafromindex.read_per_index(ID)
             configs[i,] = obs['config']
             tar_pos_config[i,] = obs['tar_pos']
-            obstacle_posnori[i,] = np.concatenate((obs['obstacle_pos'], obs['obstacle_ori']))
-            #obstacle_ori[i,] = obs['obstacle_ori']
+            obstacle_posnori[i,] = obs['obstacle']
             actions[i,] = act
 
         return [configs, tar_pos_config, obstacle_posnori], actions

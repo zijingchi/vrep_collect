@@ -1,2 +1,5 @@
 jing:
 tensorboard_logs/5dof_model1_4是第一轮dagger训练结果，对应的h5文件是5dof_model1_15.h5。初始数据集的训练结果是5dof_model1_4.h5，对应的数据集是vrep_path_dataset/16。对应的模型结构是5dof_model1.jpg。第二轮dagger训练结果是5dof_model1_23.h5，5dof_model1_4/log，mae无法降到0.32以下
+
+ubuntu:
+tensorboard_logs/model10_3 learning_rate = 2e-3, lr_decay = 2e-3, l1_regul = 4e-5. model10_1.jpg, model10_7_weights.h5

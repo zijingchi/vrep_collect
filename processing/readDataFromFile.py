@@ -243,8 +243,7 @@ class DataFromIndex(object):
             tar_pos = np.array(inits['target_joint_pos'][:-1])
             if self.load_depth:
                 observation['depth'] = obs[t]['depth']
-            obstacle_pos = np.array(inits['obstacle_pos'])
-            obstacle_ori = inits['obstacle_ori']
+            obstacle_points = inits['obstacle']
             if flagd:
                 dagger_pkl = os.path.join(datadir, 'dagger.pkl')
                 with open(dagger_pkl, 'rb') as dagger_file:
@@ -257,13 +256,11 @@ class DataFromIndex(object):
         if self.rad2deg:
             config = np.rad2deg(config)
             tar_pos = np.rad2deg(tar_pos)
-            obstacle_ori = np.rad2deg(obstacle_ori)
             action = np.rad2deg(action)
 
         observation['config'] = config
         observation['tar_pos'] = tar_pos
-        observation['obstacle_pos'] = obstacle_pos
-        observation['obstacle_ori'] = obstacle_ori
+        observation['obstacle'] = obstacle_points[0]
         return observation, action
 
     def read_from_indexes(self, indexes):
