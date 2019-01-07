@@ -117,9 +117,9 @@ class UR5WithCameraSample(vrep_env.VrepEnv):
         self.obj_set_position(self.goal_viz, tip_pos)
         self.obj_set_orientation(self.goal_viz, tip_ori)
         # obstacle_pos = tip_pos + 0.2*(np.random.rand(3) + np.array([-3.3, 1.1, -0.3]))
-        self.obstacle_pos = 0.75*np.array(tip_pos) + np.array([0.1*np.random.randn(),
-                                                              0.1+0.1*(0.5-np.random.rand()),
-                                                              0.15+0.03*np.random.rand()])
+        self.obstacle_pos = 0.75*np.array(tip_pos) + np.array([0.2*np.random.randn(),
+                                                              0.1+0.2*(0.5-np.random.rand()),
+                                                              0.15+0.05*np.random.rand()])
         #self.obstacle_pos[2] = 0.35 + 0.2*np.random.rand()
         self.obstacle_pos = np.array(self.obstacle_pos)
         self.obj_set_position(self.obstable, self.obstacle_pos)
@@ -137,9 +137,11 @@ class UR5WithCameraSample(vrep_env.VrepEnv):
     def set_obs_pos2(self):
         self.set_joints(self.init_joint_pos)
         tip_pos = self.obj_get_position(self.tip)
-        self.obstacle_pos = 1.0*np.array(tip_pos) + 0.2*tipcoor(self.target_joint_pos + [0])
-        self.obstacle_pos[0] = self.obstacle_pos[0] + 0.2*np.random.randn()
-        self.obstacle_pos[1] = self.obstacle_pos[1] + 0.2 * np.random.randn()
+        alpha = np.random.rand()-1
+        self.obstacle_pos = alpha*np.array(tip_pos) + (1-alpha)*tipcoor(self.target_joint_pos + [0])
+        self.obstacle_pos[0] = self.obstacle_pos[0] + 0.3*np.random.randn()
+        self.obstacle_pos[1] = self.obstacle_pos[1] + 0.2*np.random.randn()
+        self.obstacle_pos[2] = self.obstacle_pos[2] + 0.15*(np.random.rand()+1)
         self.obj_set_position(self.obstable, self.obstacle_pos)
         self.obstacle_ori = 0.2 * np.random.rand(3)
         self.obj_set_orientation(self.obstable, self.obstacle_ori)
@@ -166,7 +168,7 @@ class UR5WithCameraSample(vrep_env.VrepEnv):
         self._make_action(action)
         self.step_simulation()
 
-        return self.observation, action[:-1]
+        return self.observation, action
 
     def reset(self):
         if self.sim_running:
@@ -233,7 +235,7 @@ def main(args):
         maxdir = max(numlist)
     os.chdir(workpath)
     env = UR5WithCameraSample()
-    for i in range(maxdir + 1, maxdir + 100):
+    for i in range(maxdir + 1, maxdir + 80):
         print('iter:', i)
         found = env.reset()
         if found:
@@ -244,7 +246,7 @@ def main(args):
             acs = []
             for t in range(env.n_path-1):
                 observation, action = env.step(t)
-                obs.append(observation['joint'][:-1])
+                obs.append(observation['joint'])
                 acs.append(action)
                 img1_path = str(i) + "/img1/" + str(t) + ".jpg"
                 img2_path = str(i) + "/img2/" + str(t) + ".jpg"

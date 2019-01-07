@@ -240,7 +240,7 @@ class DataFromIndex(object):
             obs = pkl_data['observations']
             # config = obs[t]['joint']
             config = obs[t]
-            tar_pos = np.array(inits['target_joint_pos'][:-1])
+            tar_pos = np.array(inits['target_joint_pos'])
             if self.load_depth:
                 observation['depth'] = obs[t]['depth']
             obstacle_pos = np.array(inits['obstacle_pos'])
