@@ -99,6 +99,11 @@ class UR5WithCameraSample(vrep_env.VrepEnv):
         else:
             return -1
 
+    def _cal_depth(self, chandle, zfar, znear):
+        depmat = self.obj_get_depth_matrix(chandle)
+        depmat = znear*np.ones(np.shape(depmat)) + (zfar - znear)*depmat
+        return depmat
+
     def _make_action(self, a):
         """Send action to v-rep
         """

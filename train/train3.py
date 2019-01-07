@@ -13,8 +13,6 @@ from keras import optimizers, losses, regularizers
 from processing.DataGenerator import CustomDataGenWthTarCfg
 from processing.angle_dis import metrics
 
-learning_rate = 1e-3         # 学习率
-lr_decay = 3e-3
 l1_regu = 1e-5
 l2_regu = 1e-10
 #metrics = [1, 4, 3.2, 0.3, 0.2]
@@ -295,8 +293,10 @@ def separate_train_test2(datapath, listpkl, listpkl0=None):
 
 
 def train_with_generator(datapath, batch_size, epochs):
+    learning_rate = 2e-4  # 学习率
+    lr_decay = 3e-3
     model = model_with_latentspace2(5)
-    #model.load_weights('./h5files/5dof_latent_weights1_1.h5')
+    model.load_weights('./h5files/5dof_latent_weights4.h5')
     model.compile(loss=weighted_logcosh,
                   optimizer=optimizers.Adam(lr=learning_rate, beta_1=0.9, beta_2=0.999, decay=lr_decay),
                   metrics=['mse'])
@@ -323,10 +323,10 @@ def train_with_generator(datapath, batch_size, epochs):
                                   callbacks=[TensorBoard(log_dir='./tensorboard_logs/5dof_latent3/log')],
                                   workers=3)
     # K.clear_session()
-    model.save('./h5files/5dof_latent_3.h5')
-    model.save_weights('./h5files/5dof_latent_weights3.h5')
+    model.save('./h5files/5dof_latent_4.h5')
+    model.save_weights('./h5files/5dof_latent_weights5.h5')
 
 
 if __name__ == '__main__':
     datapath = '/home/czj/vrep_path_dataset/2/'
-    train_with_generator(datapath, 72, 500)
+    train_with_generator(datapath, 100, 300)
