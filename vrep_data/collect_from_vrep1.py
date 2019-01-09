@@ -122,8 +122,8 @@ class UR5WithCameraSample(vrep_env.VrepEnv):
         self.obj_set_position(self.goal_viz, tip_pos)
         self.obj_set_orientation(self.goal_viz, tip_ori)
         # obstacle_pos = tip_pos + 0.2*(np.random.rand(3) + np.array([-3.3, 1.1, -0.3]))
-        self.obstacle_pos = 0.75*np.array(tip_pos) + np.array([0.2*np.random.randn(),
-                                                              0.1+0.2*(0.5-np.random.rand()),
+        self.obstacle_pos = 0.8*np.array(tip_pos) + np.array([0.1*np.random.randn(),
+                                                              0.1+0.1*(0.5-np.random.rand()),
                                                               0.15+0.05*np.random.rand()])
         #self.obstacle_pos[2] = 0.35 + 0.2*np.random.rand()
         self.obstacle_pos = np.array(self.obstacle_pos)
@@ -229,7 +229,7 @@ def main(args):
     path0 = os.getcwd()
     hi = path0.find('home') + 5
     homepath = path0[:path0.find('/', hi)]
-    workpath = homepath + '/vrep_path_dataset/2/'
+    workpath = homepath + '/vrep_path_dataset/2_2/'
     if not os.path.exists(workpath):
         os.mkdir(workpath)
     dirlist = os.listdir(workpath)
@@ -240,7 +240,7 @@ def main(args):
         maxdir = max(numlist)
     os.chdir(workpath)
     env = UR5WithCameraSample()
-    for i in range(maxdir + 1, maxdir + 80):
+    for i in range(maxdir + 1, maxdir + 10):
         print('iter:', i)
         found = env.reset()
         if found:
@@ -262,7 +262,7 @@ def main(args):
                 pickle.dump(data, f)
         else:
             print("path not found")
-    # print("Episode finished after {} timesteps.\tTotal reward: {}".format(t+1,total_reward))
+    # TODO: make larger dataset
     env.close()
     return 0
 

@@ -4,21 +4,24 @@ import numpy as np
 """
     REMEMBER TO CHECK IF THE DATAPATH IS WHAT YOU EXPECT!!!!!!!!!!
 """
-datapath = '/home/czj/vrep_path_dataset/2/'
-dirlist = os.listdir(datapath)
-if 'list0.pkl' in dirlist:
-    raise RuntimeError('not the new dataset!')
-s = 0
-numlist = list(range(s, s+len(dirlist)))
+datapath = '/home/czj/vrep_path_dataset/2_3'
 
-try:
-    for d, n in zip(dirlist, numlist):
-        oldname = os.path.join(datapath, d)
-        newname = os.path.join(datapath, str(n))
-        if os.path.isdir(oldname):
-            os.rename(oldname, newname)
-except OSError as e:
-    print('error rename')
+
+def change_name(datapath):
+    dirlist = os.listdir(datapath)
+    if 'list0.pkl' in dirlist:
+        raise RuntimeError('not the new dataset!')
+    s = 0
+    numlist = list(range(s, s+len(dirlist)))
+
+    try:
+        for d, n in zip(dirlist, numlist):
+            oldname = os.path.join(datapath, d)
+            newname = os.path.join(datapath, 'd'+str(n))
+            if os.path.isdir(oldname):
+                os.rename(oldname, newname)
+    except OSError as e:
+        print('error rename')
 
 
 def separate_train_test2(datapath, listpkl, listpkl0=None):
@@ -47,4 +50,5 @@ def separate_train_test2(datapath, listpkl, listpkl0=None):
         pickle.dump({'train': train_list, 'test': vali_list}, f1)
 
 
+change_name(datapath)
 separate_train_test2(datapath, 'list0.pkl')

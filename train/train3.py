@@ -13,7 +13,7 @@ from keras import optimizers, losses, regularizers
 from processing.DataGenerator import CustomDataGenWthTarCfg
 from processing.angle_dis import metrics
 
-l1_regu = 1e-5
+l1_regu = 1e-10
 l2_regu = 1e-10
 #metrics = [1, 4, 3.2, 0.3, 0.2]
 
@@ -266,42 +266,16 @@ def weighted_logcosh(y_true, y_pred):
     return K.mean(_logcosh(weighted_sub), axis=-1)
 
 
-def separate_train_test2(datapath, listpkl, listpkl0=None):
-    dirlist = os.listdir(datapath)
-    id_list = []
-    for d in dirlist:
-        subdir = os.path.join(datapath, d)
-        if os.path.isdir(subdir):
-            datapkl = os.path.join(subdir, 'data.pkl')
-            if os.path.exists(datapkl):
-                with open(datapkl, 'rb') as dataf:
-                    data = pickle.load(dataf)
-                    for i in range(len(data['actions'])):
-                        id_list.append(d + '-' + str(i))
-    id_size = len(id_list)
-    train_size = int(0.8 * id_size)
-    np.random.shuffle(id_list)
-    train_list = id_list[:train_size]
-    vali_list = id_list[train_size:]
-    if listpkl0:
-        with open(os.path.join(datapath, listpkl0), 'rb') as f0:
-            list0 = pickle.load(f0)
-            train_list = train_list + list0['train']
-            vali_list = vali_list + list0['test']
-    with open(os.path.join(datapath, listpkl), 'wb') as f1:
-        pickle.dump({'train': train_list, 'test': vali_list}, f1)
-
-
 def train_with_generator(datapath, batch_size, epochs):
     learning_rate = 2e-4  # 学习率
-    lr_decay = 3e-3
+    lr_decay = 1e-3
     model = model_with_latentspace2(5)
-    model.load_weights('./h5files/5dof_latent_weights4.h5')
+    model.load_weights('./h5files/5dof_latent_weights2.h5')
     model.compile(loss=weighted_logcosh,
                   optimizer=optimizers.Adam(lr=learning_rate, beta_1=0.9, beta_2=0.999, decay=lr_decay),
                   metrics=['mse'])
     #model.summary()
-    print(learning_rate, lr_decay)
+    #print(learning_rate, lr_decay)
     #plot_model(model, to_file='5dof_latent3.jpg', show_shapes=True)
     with open(os.path.join(datapath, 'list0.pkl'), 'rb') as f:
         lists = pickle.load(f)
@@ -320,11 +294,11 @@ def train_with_generator(datapath, batch_size, epochs):
                                   epochs=epochs,
                                   validation_data=vali_gen,
                                   use_multiprocessing=True,
-                                  callbacks=[TensorBoard(log_dir='./tensorboard_logs/5dof_latent3/log')],
+                                  callbacks=[TensorBoard(log_dir='./tensorboard_logs/5dof_latent7/log')],
                                   workers=3)
     # K.clear_session()
-    model.save('./h5files/5dof_latent_4.h5')
-    model.save_weights('./h5files/5dof_latent_weights5.h5')
+    #model.save('./h5files/5dof_latent_6.h5')
+    model.save_weights('./h5files/5dof_latent_weights3.h5')
 
 
 if __name__ == '__main__':

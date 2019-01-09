@@ -5,17 +5,18 @@ import os
 # import tensorflow as tf
 import pickle
 from keras.models import Model, load_model, model_from_json
-from keras.layers import BatchNormalization, Activation, Dense, Input
+from keras.layers import BatchNormalization, Activation, Dense, Input, Dropout, Multiply
 from keras.layers.merge import Subtract, Concatenate
 from keras.callbacks import TensorBoard, TerminateOnNaN
 from keras.utils import plot_model
-from keras import optimizers, losses
+from keras import optimizers, losses, regularizers
 from processing.DataGenerator import CustomDataGenWthTarCfg
 from train.mdn import *
+from train.train3 import weighted_logcosh
 
-learning_rate = 2e-2         # 学习率
-# learning_rate = 0.1
-lr_decay = 1e-3
+l1_regu = 1e-5
+N_MIXES = 30
+OUTPUT_DIMS = 5
 
 
 def model_with_config_n_target():
@@ -61,37 +62,148 @@ def model_with_config_n_target():
     y = Activation('relu', name='final_relu1')(y)
     y = Dense(128, activation='relu', name='final_dense2')(y)
     y = Dense(128, activation='relu', name='final_dense3')(y)
-    N_MIXES = 30
-    OUTPUT_DIMS = 5
     final_output = MDN(OUTPUT_DIMS, N_MIXES)(y)
     model = Model(inputs=[config, target, obstacle_posnori],
                   outputs=final_output)
-    model.compile(loss=get_mixture_loss_func(OUTPUT_DIMS, N_MIXES),
+    """model.compile(loss=get_mixture_loss_func(OUTPUT_DIMS, N_MIXES),
                   optimizer=optimizers.Adam(lr=learning_rate, beta_1=0.9, beta_2=0.999, decay=lr_decay),
-                  metrics=[get_mixture_mse_accuracy(OUTPUT_DIMS, N_MIXES)])
+                  metrics=[get_mixture_mse_accuracy(OUTPUT_DIMS, N_MIXES)])"""
     # model.summary()
     return model
 
 
-def separate_train_test(datapath):
-    dirlist = os.listdir(datapath)
-    id_list = []
-    for d in dirlist:
-        subdir = os.path.join(datapath, d)
-        if os.path.isdir(subdir):
-            datapkl = os.path.join(subdir, 'data.pkl')
-            if os.path.exists(datapkl):
-                with open(datapkl, 'rb') as dataf:
-                    data = pickle.load(dataf)
-                    for i in range(len(data['actions'])):
-                        id_list.append(d + '-' + str(i))
-    id_size = len(id_list)
-    train_size = int(0.8 * id_size)
-    np.random.shuffle(id_list)
-    train_list = id_list[:train_size]
-    vali_list = id_list[train_size:]
-    with open(os.path.join(datapath, 'list0.pkl'), 'wb') as f:
-        pickle.dump({'train': train_list, 'test': vali_list}, f)
+def fdlp4theta(dof):
+    """map the theta to a latent space"""
+    input = Input(shape=(dof,))
+    y = Dense(64,
+              kernel_regularizer=regularizers.l1(l1_regu),
+              bias_regularizer=regularizers.l1(l1_regu),
+              name='f-dense1')(input)
+    y = BatchNormalization(name='f-bn1')(y)
+    y = Activation('relu', name='f-relu1')(y)
+    y = Dense(64, activation='relu', name='f-dense2')(y)
+    y = Dense(64, name='f-dense3')(y)
+    y = BatchNormalization(name='f-bn2')(y)
+    y = Activation('relu', name='f-relu2')(y)
+    #y = Dropout(0.5, name='f-dp1')(y)
+    y = Dense(32, activation='relu', name='f-dense4')(y)
+    fmodel = Model(inputs=input, outputs=y)
+    return fmodel
+
+
+def model_with_latentspace_mdn(dof):
+    config = Input(shape=(dof,), name='angles')
+    target = Input(shape=(dof,), name='target')
+    obstacle = Input(shape=(24,), name='obstacle')
+
+    x1 = Dense(64, name='config-dense1',
+               kernel_regularizer=regularizers.l1(l1_regu),
+               #bias_regularizer=regularizers.l2(l2_regu)
+               )(config)
+    x1 = BatchNormalization(name='config-bn1')(x1)
+    x1 = Activation('relu', name='config-relu1')(x1)
+    x1 = Dense(32, activation='relu', name='config-dense2')(x1)
+    x2 = Dense(64, name='target-dense1',
+               kernel_regularizer=regularizers.l1(l1_regu),
+               #bias_regularizer=regularizers.l2(l2_regu)
+               )(target)
+    x2 = BatchNormalization(name='target-bn1')(x2)
+    x2 = Activation('relu', name='target-relu1')(x2)
+    x2 = Dense(32, activation='relu', name='target-dense2')(x2)
+    x3 = Dense(64, name='obs-dense1',
+               kernel_regularizer=regularizers.l1(l1_regu),
+               #bias_regularizer=regularizers.l2(l2_regu)
+               )(obstacle)
+    x3 = BatchNormalization(name='obs-bn1')(x3)
+    x3 = Activation('relu', name='obs-relu1')(x3)
+    x3 = Dense(32, activation='relu', name='obs-dense2')(x3)
+
+    merge1 = Concatenate(name='concat')([x1, x2, x3])
+    alpha = Dense(64, name='alpha-dense1')(merge1)
+    alpha = BatchNormalization(name='alpha-bn1')(alpha)
+    alpha = Activation('relu', name='alpha-relu1')(alpha)
+    alpha = Dense(64, activation='relu',
+                  kernel_regularizer=regularizers.l1(l1_regu),
+                  bias_regularizer=regularizers.l1(l1_regu),
+                  name='alpha-dense2')(alpha)
+    alpha = Dropout(0.5, name='alpha-dp1')(alpha)
+    alpha = Dense(5, name='alpha-final')(alpha)
+
+    beta = Dense(64, name='beta-dense1')(merge1)
+    beta = BatchNormalization(name='beta-bn1')(beta)
+    beta = Activation('relu', name='beta-relu1')(beta)
+    beta = Dense(64, activation='relu',
+                 kernel_regularizer=regularizers.l1(l1_regu),
+                 bias_regularizer=regularizers.l1(l1_regu),
+                 name='beta-dense2')(beta)
+    beta = Dropout(0.5, name='beta-dp1')(beta)
+    beta = Dense(32, name='beta-final')(beta)
+
+    theta_sub = Subtract(name='target-config')([target, config])
+    multi1 = Multiply(name='alpha_sub')([alpha, theta_sub])
+
+    o = Dense(64,
+              kernel_regularizer=regularizers.l1(l1_regu),
+              bias_regularizer=regularizers.l1(l1_regu),
+              name='obs-latent-dense1')(obstacle)
+    o = BatchNormalization(name='obs-latent-bn1')(o)
+    o = Activation('relu', name='obs-latent-relu1')(o)
+    o = Dense(64, activation='relu', name='obs-latent-dense2')(o)
+    o = Dense(32, activation='relu', name='obs-latent-dense3')(o)
+    t = Dense(64, name='target-obs-dense1',
+              kernel_regularizer=regularizers.l1(l1_regu),
+              bias_regularizer=regularizers.l1(l1_regu))(target)
+    t = BatchNormalization(name='target-obs-bn1')(t)
+    t = Activation('relu', name='target-obs-relu')(t)
+    t = Dense(64, activation='relu', name='target-obs-dense2')(t)
+    t = Dense(32, activation='relu', name='target-obs-dense3')(t)
+    obs_all = Concatenate(name='obs-merge')([o, t])
+    obs_all = Dense(64, activation='relu',
+                    name='obs-latent-dense4',
+                    kernel_regularizer=regularizers.l1(l1_regu),
+                    bias_regularizer=regularizers.l1(l1_regu))(obs_all)
+    obs_all = Dense(64, activation='relu', name='obs-latent-dense5')(obs_all)
+    obs_all = Dense(32, activation='relu', name='obs-latent-dense6')(obs_all)
+    fmodel = fdlp4theta(dof)
+    latent_config = fmodel(config)
+    obs_sub = Subtract(name='config-obs')([latent_config, obs_all])
+    obs_sub = Dense(128,
+                    kernel_regularizer=regularizers.l1(l1_regu),
+                    bias_regularizer=regularizers.l1(l1_regu),
+                    name='obs-sub-dense1')(obs_sub)
+    obs_sub = BatchNormalization(name='obs-sub-bn1')(obs_sub)
+    obs_sub = Activation('relu', name='obs-sub-relu1')(obs_sub)
+    obs_sub = Dense(64, activation='relu',
+                    kernel_regularizer=regularizers.l1(l1_regu),
+                    bias_regularizer=regularizers.l1(l1_regu),
+                    name='obs-sub-dense2')(obs_sub)
+    obs_sub = Dense(32, activation='relu', name='obs-sub-dense3')(obs_sub)
+    multi2 = Multiply(name='beta_sub')([beta, obs_sub])
+    latent_action = Concatenate(name='theta_obs')([multi1, multi2])
+
+    final = Dense(128, name='final-dense1',
+                  kernel_regularizer=regularizers.l1(4*l1_regu))(latent_action)
+    final = BatchNormalization(name='final-bn1')(final)
+    final = Activation('relu', name='final-relu1')(final)
+    final = Dense(64, activation='relu',
+                  name='final-dense2',
+                  kernel_regularizer=regularizers.l1(l1_regu),
+                  bias_regularizer=regularizers.l1(l1_regu))(final)
+    #final = Dropout(0.5, name='final-dp1')(final)
+    final = Dense(32, activation='relu',
+                  name='final-dense3',
+                  kernel_regularizer=regularizers.l1(l1_regu),
+                  bias_regularizer=regularizers.l1(l1_regu))(final)
+    N_MIXES = 30
+    OUTPUT_DIMS = 5
+    final_output = MDN(OUTPUT_DIMS, N_MIXES)(final)
+
+    model = Model(inputs=[config, target, obstacle],
+                  outputs=final_output)
+    """model.compile(loss=weighted_logcosh,
+                  optimizer=optimizers.Adam(lr=learning_rate, beta_1=0.9, beta_2=0.999, decay=lr_decay),
+                  metrics=['mse'])"""
+    return model
 
 
 def loadmodeltest():
@@ -105,40 +217,17 @@ def loadmodeltest():
     return model2
 
 
-def separate_train_test2(datapath):
-    dirlist = os.listdir(datapath)
-    id_list = []
-    for d in dirlist:
-        subdir = os.path.join(datapath, d)
-        if os.path.isdir(subdir):
-            datapkl = os.path.join(subdir, 'data.pkl')
-            if os.path.exists(datapkl):
-                with open(datapkl, 'rb') as dataf:
-                    data = pickle.load(dataf)
-                    for i in range(len(data['actions'])):
-                        id_list.append(d + '-' + str(i))
-    id_size = len(id_list)
-    train_size = int(0.8 * id_size)
-    np.random.shuffle(id_list)
-    train_list = id_list[:train_size]
-    vali_list = id_list[train_size:]
-    with open(os.path.join(datapath, 'list2.pkl'), 'rb') as f0:
-        list0 = pickle.load(f0)
-        train_list = train_list + list0['train']
-        vali_list = vali_list + list0['test']
-    with open(os.path.join(datapath, 'list3.pkl'), 'wb') as f1:
-        pickle.dump({'train': train_list, 'test': vali_list}, f1)
-
-
 def train_with_generator(datapath, batch_size, epochs):
-    model = model_with_config_n_target()
-    #model.load_weights('./h5files/model8_4_weights.h5')
-    #model1 = loadmodeltest()
-    """
+    learning_rate = 2e-2  # 学习率
+    lr_decay = 1e-3
+    model = model_with_latentspace_mdn(5)
+    # model.load_weights('./h5files/5dof_latent_weights6.h5')
     model.compile(loss=get_mixture_loss_func(OUTPUT_DIMS, N_MIXES),
                   optimizer=optimizers.Adam(lr=learning_rate, beta_1=0.9, beta_2=0.999, decay=lr_decay),
-                  metrics=[get_mixture_mse_accuracy(OUTPUT_DIMS, N_MIXES)])"""
-    plot_model(model, to_file='model9.jpg', show_shapes=True)
+                  metrics=[get_mixture_mse_accuracy(OUTPUT_DIMS, N_MIXES)])
+    # model.summary()
+    # print(learning_rate, lr_decay)
+    # plot_model(model, to_file='5dof_latent3.jpg', show_shapes=True)
     with open(os.path.join(datapath, 'list0.pkl'), 'rb') as f:
         lists = pickle.load(f)
         train_list = lists['train']
@@ -152,20 +241,18 @@ def train_with_generator(datapath, batch_size, epochs):
                                       list_IDs=vali_list,
                                       data_size=50,
                                       batch_size=batch_size)
-    history= model.fit_generator(generator=train_gen,
+    history = model.fit_generator(generator=train_gen,
                                   epochs=epochs,
                                   validation_data=vali_gen,
                                   use_multiprocessing=True,
-                                  callbacks=[TensorBoard(log_dir='./tensorboard_logs/model9_1/log'), TerminateOnNaN()],
-                                  workers=2)
-
-    #model_config = model.get_config()
-    model.save_weights('./h5files/model9_1_weights.h5')
+                                  callbacks=[TensorBoard(log_dir='./tensorboard_logs/5dof_latent_mdn/log'),
+                                             TerminateOnNaN()],
+                                  workers=3)
     # K.clear_session()
-    #model1.save('./h5files/model8_5.h5')
+    # model.save('./h5files/5dof_latent_6.h5')
+    model.save_weights('./h5files/5dof_latent_mdn_weights1.h5')
 
 
 if __name__ == '__main__':
-    datapath = '/home/ubuntu/vrep_path_dataset/21/'
-    separate_train_test(datapath)
-    train_with_generator(datapath, 50, 400)
+    datapath = '/home/czj/vrep_path_dataset/2_1/'
+    train_with_generator(datapath, 64, 400)
