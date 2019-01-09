@@ -1,6 +1,6 @@
 import numpy as np
 
-metrics = [0.5, 2, 1.6, 0.15, 0.1]
+metrics = [1.5, 2, 1.6, 0.4, 0.3]
 
 
 def config_dis(config1, config2):

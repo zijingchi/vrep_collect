@@ -3,3 +3,4 @@ tensorboard_logs/5dof_model1_4是第一轮dagger训练结果，对应的h5文件
 
 ubuntu:
 tensorboard_logs/model10_3 learning_rate = 2e-3, lr_decay = 2e-3, l1_regul = 4e-5. model10_1.jpg, model10_7_weights.h5
+further training led to a mse error down to 0.1669, model10_4/log, model10_9_weights.h5
