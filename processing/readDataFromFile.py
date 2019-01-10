@@ -243,7 +243,6 @@ class DataFromIndex(object):
             tar_pos = np.array(inits['target_joint_pos'])
             if self.load_depth:
                 observation['depth'] = obs[t]['depth']
-            #obstacle_points = inits['obstacle']
             obstacle_pos = np.array(inits['obstacle_pos'])
             obstacle_ori = inits['obstacle_ori']
             if flagd:
@@ -256,13 +255,13 @@ class DataFromIndex(object):
                 action = actions[t]
 
         if self.rad2deg:
-            #config = np.rad2deg(config)
-            #tar_pos = np.rad2deg(tar_pos)
+            config = np.rad2deg(config)
+            tar_pos = np.rad2deg(tar_pos)
+            #obstacle_ori = np.rad2deg(obstacle_ori)
             action = np.rad2deg(action)
 
         observation['config'] = config
         observation['tar_pos'] = tar_pos
-        #observation['obstacle'] = obstacle_points[0]
         observation['obstacle_pos'] = obstacle_pos
         observation['obstacle_ori'] = obstacle_ori
         return observation, action
