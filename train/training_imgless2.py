@@ -15,10 +15,10 @@ from processing.DataGenerator import CustomDataGenWthTarCfg
 from processing.angle_dis import metrics
 from train.fknodes import fktensor
 
-learning_rate = 1e-3         # 学习率
+learning_rate = 1e-2         # 学习率
 # learning_rate = 0.1
 lr_decay = 1e-3
-l1_regu = 1e-12
+l1_regu = 1e-3
 
 
 def fklayer(batch_size):
@@ -295,7 +295,7 @@ def separate_train_test2(datapath, listpkl, listpkl0=None):
 
 def train_with_generator(datapath, batch_size, epochs):
     model = model_with_config_n_target2(5, batch_size)
-    model.load_weights('./h5files/model10_12_weights.h5')
+    model.load_weights('./h5files/model10_14_weights.h5')
     model.compile(loss=weighted_logcosh,
                   optimizer=optimizers.Adam(lr=learning_rate, beta_1=0.9, beta_2=0.999, decay=lr_decay),
                   metrics=['mse'])
@@ -319,14 +319,14 @@ def train_with_generator(datapath, batch_size, epochs):
                                   epochs=epochs,
                                   validation_data=vali_gen,
                                   use_multiprocessing=True,
-                                  callbacks=[TensorBoard(log_dir='./tensorboard_logs/model10_7/log')],
+                                  callbacks=[TensorBoard(log_dir='./tensorboard_logs/model10_8/log')],
                                   workers=3)
     # K.clear_session()
     #model.save('./h5files/model10_5.h5')
-    model.save_weights('./h5files/model10_13_weights.h5')
+    model.save_weights('./h5files/model10_15_weights.h5')
 
 
 if __name__ == '__main__':
-    datapath = '/home/ubuntu/vdp/2/'
+    datapath = '/home/ubuntu/vdp/2_1/'
     separate_train_test2(datapath, 'list0.pkl')
-    train_with_generator(datapath, 100, 400)
+    train_with_generator(datapath, 100, 40)

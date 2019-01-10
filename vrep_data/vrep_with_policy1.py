@@ -5,7 +5,7 @@ import time
 import pickle
 from keras.models import load_model
 from processing.angle_dis import config_dis, obs_pt
-from train.training_imgless2 import model_with_config_n_target
+from train.training_imgless2 import model_with_config_n_target2
 import numpy as np
 
 pi = np.pi
@@ -49,7 +49,7 @@ class UR5WithCameraSample(vrep_env.VrepEnv):
         self.camera2 = self.get_object_handle('camera2')
         self.goal_viz = self.get_object_handle('Cuboid')
         self.tip = self.get_object_handle('tip')
-        self.model = model = model_with_config_n_target(5, 1)
+        self.model = model_with_config_n_target2(5, 1)
         self.model.load_weights(modelweight)
         h = 256
         w = 256
@@ -61,7 +61,7 @@ class UR5WithCameraSample(vrep_env.VrepEnv):
         # Actuators
         self.oh_joint = list(map(self.get_object_handle, ur5_joints))
 
-        print('UR5VrepEnv: initialized')
+        #print('UR5VrepEnv: initialized')
 
     def _make_observation(self):
         """Get observation from v-rep and stores in self.observation
@@ -109,7 +109,7 @@ class UR5WithCameraSample(vrep_env.VrepEnv):
         """Send action to v-rep
         """
         newa = a + self.observation['joint']
-        print(a)
+        #print(a)
         self._set_joints(newa)
 
     def _cal_depth(self, chandle, zfar, znear):
@@ -178,9 +178,9 @@ class UR5WithCameraSample(vrep_env.VrepEnv):
     def step(self, t):
         self._make_observation()    # make an observation
         # predict the action from the model
-        config = self.observation['joint'][:-1]
+        config = self.observation['joint'][0:5]
         x1 = self._transpose(np.rad2deg(config))
-        x2 = self._transpose(np.rad2deg(self.target_joint_pos[:-1]))
+        x2 = self._transpose(np.rad2deg(self.target_joint_pos[0:5]))
         x3 = obs_pt(self.obstacle_pos, self.obstacle_ori)
         action = self.model.predict([x1, x2, x3])
         #action = action[0]
@@ -188,7 +188,7 @@ class UR5WithCameraSample(vrep_env.VrepEnv):
         self._make_action(action)   # make the action
         # ask the expert to give the right action if exists (here the expert is the ompl algorithm used in v-rep
         inFloats = np.append(config, np.zeros(1)).tolist() + self.target_joint_pos.tolist()
-        minConfigs = int(200 * np.linalg.norm(self.target_joint_pos[:-1] - config))
+        minConfigs = int(200 * np.linalg.norm(self.target_joint_pos[0:5] - config))
         emptyBuff = bytearray()
         n_path, path, res = self._calPathThroughVrep(self.cID, minConfigs, inFloats, emptyBuff)
         thresh = 0.08
@@ -205,7 +205,7 @@ class UR5WithCameraSample(vrep_env.VrepEnv):
             print('timeout')
             time.sleep(6)
         colcheck = self._checkInitCollision(self.cID, emptyBuff)
-        amp_between = np.linalg.norm(self.target_joint_pos[:-1] - config)
+        amp_between = np.linalg.norm(self.target_joint_pos[0:5] - config)
         check = (amp_between < 0.2) or (colcheck == 1) or (expert_action == [])
         self.step_simulation()
 
