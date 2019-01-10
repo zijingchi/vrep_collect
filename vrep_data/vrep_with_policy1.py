@@ -31,8 +31,8 @@ class UR5DaggerSample(UR5WithCameraSample):
             scene_path,
         )
 
-        self.model = model_with_latentspace2(5)
-        self.model.load_weights(modelfile)
+        #self.model = model_with_latentspace2(5)
+        #self.model.load_weights(modelfile)
 
         print('UR5DaggerSample: initialized')
 
@@ -41,9 +41,9 @@ class UR5DaggerSample(UR5WithCameraSample):
         tip_pos = self.obj_get_position(self.tip)
         alpha = np.random.rand()
         self.obstacle_pos = alpha*np.array(tip_pos) + (1-alpha)*tipcoor(np.append(self.target_joint_pos, np.zeros(1)))
-        self.obstacle_pos[0] = self.obstacle_pos[0] + 0.1*np.random.randn()
-        self.obstacle_pos[1] = self.obstacle_pos[1] + 0.1*np.random.randn()
-        self.obstacle_pos[2] = self.obstacle_pos[2] + 0.2*(np.random.rand()+0.8)
+        self.obstacle_pos[0] = self.obstacle_pos[0] + 0.4*np.random.randn()
+        self.obstacle_pos[1] = self.obstacle_pos[1] + 0.4*np.random.randn()
+        self.obstacle_pos[2] = self.obstacle_pos[2] + 0.3*(np.random.rand()+0.4)
         self.obj_set_position(self.obstable, self.obstacle_pos)
         self.obstacle_ori = 0.2 * np.random.rand(3)
         self.obj_set_orientation(self.obstable, self.obstacle_ori)
@@ -70,14 +70,15 @@ class UR5DaggerSample(UR5WithCameraSample):
         self._make_observation()    # make an observation
         # predict the action from the model
         config = self.observation['joint']
-        x1 = self._transpose(np.rad2deg(config))
+        """x1 = self._transpose(np.rad2deg(config))
         x2 = self._transpose(np.rad2deg(self.target_joint_pos))
         #x3 = self._transpose(np.concatenate((self.obstacle_pos, self.obstacle_ori)))
         x3 = obs_pt(self.obstacle_pos, self.obstacle_ori)
         action = self.model.predict([x1, x2, x3])
         #action = action[0]
         action = np.deg2rad(action[0])
-        self._make_action(action)   # make the action
+        self._make_action(action)   # make the action"""
+        action = np.zeros(5)
         # ask the expert to give the right action if exists (here the expert is the ompl algorithm used in v-rep
         inFloats = config.tolist() + self.target_joint_pos.tolist()
         minConfigs = int(200 * np.linalg.norm(self.target_joint_pos - config))
@@ -99,16 +100,17 @@ class UR5DaggerSample(UR5WithCameraSample):
             time.sleep(6)
         colcheck = self._checkInitCollision(self.cID, emptyBuff)
         amp_between = np.linalg.norm(self.target_joint_pos - config)
-        check = (amp_between < 0.2) or (colcheck == 1) or (expert_action == [])
+
+        check = (amp_between < thresh) or (colcheck == 1) or (expert_action == [])
         if check:
-            if amp_between < 0.2:
+            if amp_between < thresh:
                 print('reaching')
             if colcheck == 1:
                 print('colliding')
             if expert_action == []:
                 print('expert action not found')
-        #else:
-            #self._make_action(expert_action)
+        else:
+            self._make_action(expert_action)
 
         self.step_simulation()
 
@@ -145,7 +147,7 @@ def main(args):
     path0 = os.getcwd()
     hi = path0.find('home') + 5
     homepath = path0[:path0.find('/', hi)]
-    workpath = homepath+'/vrep_path_dataset/2_4/'
+    workpath = homepath+'/vrep_path_dataset/2_5/'
     path1 = path0[:path0.rfind('/')]
     model_path = os.path.join(path1, 'train/h5files/5dof_latent_weights10.h5')
     if not os.path.exists(workpath):
@@ -158,7 +160,7 @@ def main(args):
         maxdir = max(numlist)
     os.chdir(workpath)
     env = UR5DaggerSample(modelfile=model_path)
-    for i in range(maxdir+1, maxdir+150):
+    for i in range(maxdir+1, maxdir+200):
         print('iter:', i)
         collision = env.reset()
         if collision:
