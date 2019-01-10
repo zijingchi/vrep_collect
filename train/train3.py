@@ -6,7 +6,7 @@ import tensorflow as tf
 import pickle
 from keras.models import Model, load_model
 from keras.layers import BatchNormalization, Activation, Dense, Input, Dropout
-from keras.layers.merge import Subtract, Concatenate, Multiply
+from keras.layers.merge import Subtract, Concatenate, Multiply, Add
 from keras.callbacks import TensorBoard
 from keras.utils import plot_model
 from keras import optimizers, losses, regularizers
@@ -229,8 +229,13 @@ def model_with_latentspace2(dof):
                     name='obs-sub-dense2')(obs_sub)
     obs_sub = Dense(32, activation='relu', name='obs-sub-dense3')(obs_sub)
     multi2 = Multiply(name='beta_sub')([beta, obs_sub])
-    latent_action = Concatenate(name='theta_obs')([multi1, multi2])
-
+    multi2 = Dense(32, name='final-dense1',
+                   kernel_regularizer=regularizers.l1(l1_regu))(multi2)
+    multi2 = BatchNormalization(name='final-bn1')(multi2)
+    multi2 = Activation('relu', name='final-relu1')(multi2)
+    multi2 = Dense(5, name='final-dense2')(multi2)
+    final = Add(name='final-add')([multi1, multi2])
+    """latent_action = Concatenate(name='theta_obs')([multi1, multi2])
     final = Dense(128, name='final-dense1',
                   kernel_regularizer=regularizers.l1(4*l1_regu))(latent_action)
     final = BatchNormalization(name='final-bn1')(final)
@@ -245,7 +250,7 @@ def model_with_latentspace2(dof):
                   kernel_regularizer=regularizers.l1(l1_regu),
                   bias_regularizer=regularizers.l1(l1_regu))(final)
     #final = Dense(32, activation='relu', name='final-dense4')(final)
-    final = Dense(dof, name='output')(final)
+    final = Dense(dof, name='output')(final)"""
 
     model = Model(inputs=[config, target, obstacle],
                   outputs=final)
@@ -267,10 +272,10 @@ def weighted_logcosh(y_true, y_pred):
 
 
 def train_with_generator(datapath, batch_size, epochs):
-    learning_rate = 2e-4  # 学习率
+    learning_rate = 2e-2  # 学习率
     lr_decay = 1e-3
     model = model_with_latentspace2(5)
-    model.load_weights('./h5files/5dof_latent_weights2.h5')
+    #model.load_weights('./h5files/5dof_latent_weights2.h5')
     model.compile(loss=weighted_logcosh,
                   optimizer=optimizers.Adam(lr=learning_rate, beta_1=0.9, beta_2=0.999, decay=lr_decay),
                   metrics=['mse'])
@@ -294,11 +299,11 @@ def train_with_generator(datapath, batch_size, epochs):
                                   epochs=epochs,
                                   validation_data=vali_gen,
                                   use_multiprocessing=True,
-                                  callbacks=[TensorBoard(log_dir='./tensorboard_logs/5dof_latent7/log')],
+                                  callbacks=[TensorBoard(log_dir='./tensorboard_logs/5dof_latent8/log')],
                                   workers=3)
     # K.clear_session()
     #model.save('./h5files/5dof_latent_6.h5')
-    model.save_weights('./h5files/5dof_latent_weights3.h5')
+    model.save_weights('./h5files/5dof_latent_weights4.h5')
 
 
 if __name__ == '__main__':
