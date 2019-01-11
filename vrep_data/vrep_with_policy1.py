@@ -39,11 +39,11 @@ class UR5DaggerSample(UR5WithCameraSample):
     def set_obs_pos2(self):
         self.set_joints(self.init_joint_pos)
         tip_pos = self.obj_get_position(self.tip)
-        alpha = np.random.rand()
+        alpha = 2+np.random.rand()
         self.obstacle_pos = alpha*np.array(tip_pos) + (1-alpha)*tipcoor(np.append(self.target_joint_pos, np.zeros(1)))
         self.obstacle_pos[0] = self.obstacle_pos[0] + 0.4*np.random.randn()
         self.obstacle_pos[1] = self.obstacle_pos[1] + 0.4*np.random.randn()
-        self.obstacle_pos[2] = self.obstacle_pos[2] + 0.3*(np.random.rand()+0.4)
+        self.obstacle_pos[2] = self.obstacle_pos[2] - 0.2*(np.random.rand()+0.4)
         self.obj_set_position(self.obstable, self.obstacle_pos)
         self.obstacle_ori = 0.2 * np.random.rand(3)
         self.obj_set_orientation(self.obstable, self.obstacle_ori)
@@ -147,19 +147,19 @@ def main(args):
     path0 = os.getcwd()
     hi = path0.find('home') + 5
     homepath = path0[:path0.find('/', hi)]
-    workpath = homepath+'/vrep_path_dataset/2_5/'
+    workpath = homepath+'/vdp/3/'
     path1 = path0[:path0.rfind('/')]
-    model_path = os.path.join(path1, 'train/h5files/5dof_latent_weights10.h5')
+    #model_path = os.path.join(path1, 'train/h5files/5dof_latent_weights10.h5')
     if not os.path.exists(workpath):
         os.mkdir(workpath)
     dirlist = os.listdir(workpath)
-    numlist = [int(s) for s in dirlist]
+    numlist = [int(s) for s in dirlist if os.path.isdir(os.path.join(workpath, s))]
     if len(numlist) == 0:
         maxdir = -1
     else:
         maxdir = max(numlist)
     os.chdir(workpath)
-    env = UR5DaggerSample(modelfile=model_path)
+    env = UR5DaggerSample()
     for i in range(maxdir+1, maxdir+200):
         print('iter:', i)
         collision = env.reset()

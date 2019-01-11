@@ -14,8 +14,8 @@ from processing.DataGenerator import CustomDataGenWthTarCfg
 from train.mdn import *
 from train.train3 import weighted_logcosh
 
-l1_regu = 1e-5
-N_MIXES = 30
+l1_regu = 1e-16
+N_MIXES = 100
 OUTPUT_DIMS = 5
 
 
@@ -96,96 +96,96 @@ def model_with_latentspace_mdn(dof):
     target = Input(shape=(dof,), name='target')
     obstacle = Input(shape=(24,), name='obstacle')
 
-    x1 = Dense(64, name='config-dense1',
+    x1 = Dense(128, name='config-dense1',
                kernel_regularizer=regularizers.l1(l1_regu),
                #bias_regularizer=regularizers.l2(l2_regu)
                )(config)
     x1 = BatchNormalization(name='config-bn1')(x1)
     x1 = Activation('relu', name='config-relu1')(x1)
-    x1 = Dense(32, activation='relu', name='config-dense2')(x1)
-    x2 = Dense(64, name='target-dense1',
+    x1 = Dense(128, activation='relu', name='config-dense2')(x1)
+    x2 = Dense(128, name='target-dense1',
                kernel_regularizer=regularizers.l1(l1_regu),
                #bias_regularizer=regularizers.l2(l2_regu)
                )(target)
     x2 = BatchNormalization(name='target-bn1')(x2)
     x2 = Activation('relu', name='target-relu1')(x2)
-    x2 = Dense(32, activation='relu', name='target-dense2')(x2)
-    x3 = Dense(64, name='obs-dense1',
+    x2 = Dense(128, activation='relu', name='target-dense2')(x2)
+    x3 = Dense(128, name='obs-dense1',
                kernel_regularizer=regularizers.l1(l1_regu),
                #bias_regularizer=regularizers.l2(l2_regu)
                )(obstacle)
     x3 = BatchNormalization(name='obs-bn1')(x3)
     x3 = Activation('relu', name='obs-relu1')(x3)
-    x3 = Dense(32, activation='relu', name='obs-dense2')(x3)
+    x3 = Dense(128, activation='relu', name='obs-dense2')(x3)
 
     merge1 = Concatenate(name='concat')([x1, x2, x3])
-    alpha = Dense(64, name='alpha-dense1')(merge1)
+    alpha = Dense(256, name='alpha-dense1')(merge1)
     alpha = BatchNormalization(name='alpha-bn1')(alpha)
     alpha = Activation('relu', name='alpha-relu1')(alpha)
     alpha = Dense(64, activation='relu',
                   kernel_regularizer=regularizers.l1(l1_regu),
                   bias_regularizer=regularizers.l1(l1_regu),
                   name='alpha-dense2')(alpha)
-    alpha = Dropout(0.5, name='alpha-dp1')(alpha)
-    alpha = Dense(5, name='alpha-final')(alpha)
+    #alpha = Dropout(0.5, name='alpha-dp1')(alpha)
+    alpha = Dense(dof, name='alpha-final')(alpha)
 
-    beta = Dense(64, name='beta-dense1')(merge1)
+    beta = Dense(256, name='beta-dense1')(merge1)
     beta = BatchNormalization(name='beta-bn1')(beta)
     beta = Activation('relu', name='beta-relu1')(beta)
     beta = Dense(64, activation='relu',
                  kernel_regularizer=regularizers.l1(l1_regu),
                  bias_regularizer=regularizers.l1(l1_regu),
                  name='beta-dense2')(beta)
-    beta = Dropout(0.5, name='beta-dp1')(beta)
-    beta = Dense(32, name='beta-final')(beta)
+    #beta = Dropout(0.5, name='beta-dp1')(beta)
+    beta = Dense(dof, name='beta-final')(beta)
 
     theta_sub = Subtract(name='target-config')([target, config])
     multi1 = Multiply(name='alpha_sub')([alpha, theta_sub])
 
-    o = Dense(64,
+    o = Dense(256,
               kernel_regularizer=regularizers.l1(l1_regu),
               bias_regularizer=regularizers.l1(l1_regu),
               name='obs-latent-dense1')(obstacle)
     o = BatchNormalization(name='obs-latent-bn1')(o)
     o = Activation('relu', name='obs-latent-relu1')(o)
-    o = Dense(64, activation='relu', name='obs-latent-dense2')(o)
-    o = Dense(32, activation='relu', name='obs-latent-dense3')(o)
-    t = Dense(64, name='target-obs-dense1',
+    o = Dense(128, activation='relu', name='obs-latent-dense2')(o)
+    o = Dense(64, activation='relu', name='obs-latent-dense3')(o)
+    t = Dense(256, name='target-obs-dense1',
               kernel_regularizer=regularizers.l1(l1_regu),
               bias_regularizer=regularizers.l1(l1_regu))(target)
     t = BatchNormalization(name='target-obs-bn1')(t)
     t = Activation('relu', name='target-obs-relu')(t)
-    t = Dense(64, activation='relu', name='target-obs-dense2')(t)
-    t = Dense(32, activation='relu', name='target-obs-dense3')(t)
+    t = Dense(128, activation='relu', name='target-obs-dense2')(t)
+    t = Dense(64, activation='relu', name='target-obs-dense3')(t)
     obs_all = Concatenate(name='obs-merge')([o, t])
-    obs_all = Dense(64, activation='relu',
+    obs_all = Dense(256, activation='relu',
                     name='obs-latent-dense4',
                     kernel_regularizer=regularizers.l1(l1_regu),
                     bias_regularizer=regularizers.l1(l1_regu))(obs_all)
-    obs_all = Dense(64, activation='relu', name='obs-latent-dense5')(obs_all)
+    obs_all = Dense(128, activation='relu', name='obs-latent-dense5')(obs_all)
     obs_all = Dense(32, activation='relu', name='obs-latent-dense6')(obs_all)
     fmodel = fdlp4theta(dof)
     latent_config = fmodel(config)
     obs_sub = Subtract(name='config-obs')([latent_config, obs_all])
-    obs_sub = Dense(128,
+    obs_sub = Dense(256,
                     kernel_regularizer=regularizers.l1(l1_regu),
                     bias_regularizer=regularizers.l1(l1_regu),
                     name='obs-sub-dense1')(obs_sub)
     obs_sub = BatchNormalization(name='obs-sub-bn1')(obs_sub)
     obs_sub = Activation('relu', name='obs-sub-relu1')(obs_sub)
-    obs_sub = Dense(64, activation='relu',
+    obs_sub = Dense(128, activation='relu',
                     kernel_regularizer=regularizers.l1(l1_regu),
                     bias_regularizer=regularizers.l1(l1_regu),
                     name='obs-sub-dense2')(obs_sub)
-    obs_sub = Dense(32, activation='relu', name='obs-sub-dense3')(obs_sub)
+    obs_sub = Dense(dof, activation='relu', name='obs-sub-dense3')(obs_sub)
     multi2 = Multiply(name='beta_sub')([beta, obs_sub])
     latent_action = Concatenate(name='theta_obs')([multi1, multi2])
 
-    final = Dense(128, name='final-dense1',
+    final = Dense(256, name='final-dense1',
                   kernel_regularizer=regularizers.l1(4*l1_regu))(latent_action)
     final = BatchNormalization(name='final-bn1')(final)
     final = Activation('relu', name='final-relu1')(final)
-    final = Dense(64, activation='relu',
+    final = Dense(128, activation='relu',
                   name='final-dense2',
                   kernel_regularizer=regularizers.l1(l1_regu),
                   bias_regularizer=regularizers.l1(l1_regu))(final)
@@ -194,8 +194,8 @@ def model_with_latentspace_mdn(dof):
                   name='final-dense3',
                   kernel_regularizer=regularizers.l1(l1_regu),
                   bias_regularizer=regularizers.l1(l1_regu))(final)
-    N_MIXES = 30
-    OUTPUT_DIMS = 5
+    #N_MIXES = 40
+    #OUTPUT_DIMS = dof
     final_output = MDN(OUTPUT_DIMS, N_MIXES)(final)
 
     model = Model(inputs=[config, target, obstacle],
@@ -218,7 +218,7 @@ def loadmodeltest():
 
 
 def train_with_generator(datapath, batch_size, epochs):
-    learning_rate = 2e-2  # 学习率
+    learning_rate = 1e-3  # 学习率
     lr_decay = 1e-3
     model = model_with_latentspace_mdn(5)
     # model.load_weights('./h5files/5dof_latent_weights6.h5')
@@ -245,14 +245,14 @@ def train_with_generator(datapath, batch_size, epochs):
                                   epochs=epochs,
                                   validation_data=vali_gen,
                                   use_multiprocessing=True,
-                                  callbacks=[TensorBoard(log_dir='./tensorboard_logs/5dof_latent_mdn/log'),
+                                  callbacks=[TensorBoard(log_dir='./tensorboard_logs/5dof_latent_mdn2/log'),
                                              TerminateOnNaN()],
                                   workers=3)
     # K.clear_session()
     # model.save('./h5files/5dof_latent_6.h5')
-    model.save_weights('./h5files/5dof_latent_mdn_weights1.h5')
+    model.save_weights('./h5files/5dof_latent_mdn_weights2.h5')
 
 
 if __name__ == '__main__':
-    datapath = '/home/czj/vrep_path_dataset/2_1/'
+    datapath = '/home/ubuntu/vdp/3/'
     train_with_generator(datapath, 64, 400)

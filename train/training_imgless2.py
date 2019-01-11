@@ -18,7 +18,7 @@ from train.fknodes import fktensor
 learning_rate = 1e-2         # 学习率
 # learning_rate = 0.1
 lr_decay = 1e-3
-l1_regu = 1e-3
+l1_regu = 1e-6
 
 
 def fklayer(batch_size):
@@ -319,14 +319,14 @@ def train_with_generator(datapath, batch_size, epochs):
                                   epochs=epochs,
                                   validation_data=vali_gen,
                                   use_multiprocessing=True,
-                                  callbacks=[TensorBoard(log_dir='./tensorboard_logs/model10_8/log')],
+                                  callbacks=[TensorBoard(log_dir='./tensorboard_logs/model10_9/log')],
                                   workers=3)
     # K.clear_session()
     #model.save('./h5files/model10_5.h5')
-    model.save_weights('./h5files/model10_15_weights.h5')
+    model.save_weights('./h5files/model10_17_weights.h5')
 
 
 if __name__ == '__main__':
-    datapath = '/home/ubuntu/vdp/2_1/'
+    datapath = '/home/ubuntu/vdp/3/'
     separate_train_test2(datapath, 'list0.pkl')
-    train_with_generator(datapath, 100, 40)
+    train_with_generator(datapath, 100, 400)

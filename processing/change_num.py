@@ -4,7 +4,7 @@ import numpy as np
 """
     REMEMBER TO CHECK IF THE DATAPATH IS WHAT YOU EXPECT!!!!!!!!!!
 """
-datapath = '/home/czj/vrep_path_dataset/2_3'
+datapath = '/home/ubuntu/vdp/3'
 
 
 def change_name(datapath):
