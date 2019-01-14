@@ -17,7 +17,7 @@ def change_name(datapath):
     try:
         for d, n in zip(dirlist, numlist):
             oldname = os.path.join(datapath, d)
-            newname = os.path.join(datapath, 'd'+str(n))
+            newname = os.path.join(datapath, str(n))
             if os.path.isdir(oldname):
                 os.rename(oldname, newname)
     except OSError as e:
@@ -38,7 +38,7 @@ def separate_train_test2(datapath, listpkl, listpkl0=None):
                         id_list.append(d + '-' + str(i))
     id_size = len(id_list)
     train_size = int(0.8 * id_size)
-    np.random.shuffle(id_list)
+    #np.random.shuffle(id_list)
     train_list = id_list[:train_size]
     vali_list = id_list[train_size:]
     if listpkl0:

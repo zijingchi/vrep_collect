@@ -255,8 +255,8 @@ class DataFromIndex(object):
                 action = actions[t]
 
         if self.rad2deg:
-            config = np.rad2deg(config)
-            tar_pos = np.rad2deg(tar_pos)
+            #config = np.rad2deg(config)
+            #tar_pos = np.rad2deg(tar_pos)
             #obstacle_ori = np.rad2deg(obstacle_ori)
             action = np.rad2deg(action)
 

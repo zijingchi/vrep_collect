@@ -15,10 +15,10 @@ from processing.DataGenerator import CustomDataGenWthTarCfg
 from processing.angle_dis import metrics
 from train.fknodes import fktensor
 
-learning_rate = 1e-2         # 学习率
+learning_rate = 8e-3         # 学习率
 # learning_rate = 0.1
 lr_decay = 1e-3
-l1_regu = 1e-6
+l1_regu = 5e-6
 
 
 def fklayer(batch_size):
@@ -238,6 +238,128 @@ def model_with_config_n_target2(dof, batch_size):
     return model
 
 
+def model_with_config_n_target3(dof):
+    config = Input(shape=(dof,), name='angles')
+    target = Input(shape=(dof,), name='target')
+    obstacle = Input(shape=(24, ), name='obstacle')
+    """config = Input(batch_shape=(batch_size, dof), name='angles')
+    target = Input(batch_shape=(batch_size, dof), name='target')
+    obstacle = Input(batch_shape=(batch_size, 24), name='obstacle')"""
+
+    x1 = Dense(128, name='config-dense1',
+               kernel_regularizer=regularizers.l1(l1_regu),
+               # bias_regularizer=regularizers.l2(l2_regu)
+               )(config)
+    x1 = BatchNormalization(name='config-bn1')(x1)
+    x1 = Activation('relu', name='config-relu1')(x1)
+    x1 = Dense(64, activation='relu', name='config-dense2')(x1)
+    x1 = Dense(32, name='config-dense3')(x1)
+    x2 = Dense(128, name='target-dense1',
+               kernel_regularizer=regularizers.l1(l1_regu),
+               # bias_regularizer=regularizers.l2(l2_regu)
+               )(target)
+    x2 = BatchNormalization(name='target-bn1')(x2)
+    x2 = Activation('relu', name='target-relu1')(x2)
+    x2 = Dense(64, activation='relu', name='target-dense2')(x2)
+    x2 = Dense(32, name='target-dense3')(x2)
+    x3 = Dense(512, name='obs-dense1',
+               kernel_regularizer=regularizers.l1(l1_regu),
+               # bias_regularizer=regularizers.l2(l2_regu)
+               )(obstacle)
+    x3 = BatchNormalization(name='obs-bn1')(x3)
+    x3 = Activation('relu', name='obs-relu1')(x3)
+    x3 = Dense(128, activation='relu', name='obs-dense2')(x3)
+    x3 = Dense(32, name='obs-dense3')(x3)
+
+    merge1 = Concatenate(name='concat')([x1, x2, x3])
+    alpha = Dense(256, name='alpha-dense1')(merge1)
+    alpha = BatchNormalization(name='alpha-bn1')(alpha)
+    alpha = Activation('relu', name='alpha-relu1')(alpha)
+    alpha = Dense(128, activation='relu',
+                  kernel_regularizer=regularizers.l1(l1_regu),
+                  bias_regularizer=regularizers.l1(l1_regu),
+                  name='alpha-dense2')(alpha)
+    alpha = Dropout(0.5, name='alpha-dp1')(alpha)
+    alpha = Dense(64, activation='relu', name='alpha-dense3')(alpha)
+    alpha = Dense(5, name='alpha-final')(alpha)
+
+    beta = Dense(256, name='beta-dense1')(merge1)
+    beta = BatchNormalization(name='beta-bn1')(beta)
+    beta = Activation('relu', name='beta-relu1')(beta)
+    beta = Dense(128, activation='relu',
+                 kernel_regularizer=regularizers.l1(l1_regu),
+                 bias_regularizer=regularizers.l1(l1_regu),
+                 name='beta-dense2')(beta)
+    beta = Dropout(0.5, name='beta-dp1')(beta)
+    beta = Dense(64, activation='relu', name='beta-dense3')(beta)
+    beta = Dense(32, name='beta-final')(beta)
+
+    theta_sub = Subtract(name='target-config')([target, config])
+    multi1 = Multiply(name='alpha_sub')([alpha, theta_sub])
+
+    o = Dense(512,
+              kernel_regularizer=regularizers.l1(l1_regu),
+              bias_regularizer=regularizers.l1(l1_regu),
+              name='obs-latent-dense1')(obstacle)
+    o = BatchNormalization(name='obs-latent-bn1')(o)
+    o = Activation('relu', name='obs-latent-relu1')(o)
+    o = Dense(128, activation='relu', name='obs-latent-dense2')(o)
+    o = Dense(64, activation='relu', name='obs-latent-dense3')(o)
+    t = Dense(256, name='target-obs-dense1',
+              kernel_regularizer=regularizers.l1(l1_regu),
+              bias_regularizer=regularizers.l1(l1_regu))(target)
+    t = BatchNormalization(name='target-obs-bn1')(t)
+    t = Activation('relu', name='target-obs-relu')(t)
+    t = Dense(64, activation='relu', name='target-obs-dense2')(t)
+    t = Dense(32, activation='relu', name='target-obs-dense3')(t)
+    obs_all = Concatenate(name='obs-merge')([o, t])
+    obs_all = Dense(512, activation='relu',
+                    name='obs-latent-dense4',
+                    kernel_regularizer=regularizers.l1(l1_regu),
+                    bias_regularizer=regularizers.l1(l1_regu))(obs_all)
+    obs_all = Dense(128, activation='relu', name='obs-latent-dense5')(obs_all)
+    obs_all = Dense(32, activation='relu', name='obs-latent-dense6')(obs_all)
+
+    latent_config = Dense(512,
+                          kernel_regularizer=regularizers.l1(l1_regu),
+                          bias_regularizer=regularizers.l1(l1_regu),
+                          name='config2latent-dense1')(config)
+    latent_config = BatchNormalization(name='config2latent-bn1')(latent_config)
+    latent_config = Activation('relu', name='config2latent-relu1')(latent_config)
+    latent_config = Dense(128, activation='relu', name='config2latent-dense2')(latent_config)
+    latent_config = Dense(32, activation='relu', name='config2latent-dense3')(latent_config)
+    obs_sub = Concatenate(name='config-obs')([latent_config, obs_all])
+    obs_sub = Dense(512,
+                    kernel_regularizer=regularizers.l1(l1_regu),
+                    bias_regularizer=regularizers.l1(l1_regu),
+                    name='obs-sub-dense1')(obs_sub)
+    obs_sub = BatchNormalization(name='obs-sub-bn1')(obs_sub)
+    obs_sub = Activation('relu', name='obs-sub-relu1')(obs_sub)
+    obs_sub = Dense(128, activation='relu',
+                    kernel_regularizer=regularizers.l1(l1_regu),
+                    bias_regularizer=regularizers.l1(l1_regu),
+                    name='obs-sub-dense2')(obs_sub)
+    obs_sub = Dense(32, activation='relu', name='obs-sub-dense3')(obs_sub)
+    multi2 = Multiply(name='beta_sub')([beta, obs_sub])
+    latent_action = Concatenate(name='theta_obs')([multi1, multi2])
+
+    final = Dense(1024, name='final-dense1',
+                  kernel_regularizer=regularizers.l1(3*l1_regu))(latent_action)
+    final = BatchNormalization(name='final-bn1')(final)
+    final = Activation('relu', name='final-relu1')(final)
+    final = Dense(128, activation='relu',
+                  name='final-dense2',
+                  kernel_regularizer=regularizers.l1(l1_regu),
+                  bias_regularizer=regularizers.l1(l1_regu))(final)
+    final = Dropout(0.5, name='final-dp1')(final)
+
+    final = Dense(dof, name='output')(final)
+
+    model = Model(inputs=[config, target, obstacle],
+                  outputs=final)
+    return model
+
+
 def weighted_logcosh(y_true, y_pred):
 
     def _logcosh(x):
@@ -294,13 +416,13 @@ def separate_train_test2(datapath, listpkl, listpkl0=None):
 
 
 def train_with_generator(datapath, batch_size, epochs):
-    model = model_with_config_n_target2(5, batch_size)
-    model.load_weights('./h5files/model10_14_weights.h5')
+    model = model_with_config_n_target3(5)
+    # model.load_weights('./h5files/model10_14_weights.h5')
     model.compile(loss=weighted_logcosh,
                   optimizer=optimizers.Adam(lr=learning_rate, beta_1=0.9, beta_2=0.999, decay=lr_decay),
                   metrics=['mse'])
     #model.summary()
-    print(learning_rate, lr_decay, l1_regu)
+    #print(learning_rate, lr_decay, l1_regu)
     #plot_model(model, to_file='model10_1.jpg', show_shapes=True)
     with open(os.path.join(datapath, 'list0.pkl'), 'rb') as f:
         lists = pickle.load(f)
@@ -319,14 +441,14 @@ def train_with_generator(datapath, batch_size, epochs):
                                   epochs=epochs,
                                   validation_data=vali_gen,
                                   use_multiprocessing=True,
-                                  callbacks=[TensorBoard(log_dir='./tensorboard_logs/model10_9/log')],
+                                  callbacks=[TensorBoard(log_dir='./tensorboard_logs/model10_big/log')],
                                   workers=3)
     # K.clear_session()
     #model.save('./h5files/model10_5.h5')
-    model.save_weights('./h5files/model10_17_weights.h5')
+    model.save_weights('./h5files/model10_big_weights.h5')
 
 
 if __name__ == '__main__':
     datapath = '/home/ubuntu/vdp/3/'
-    separate_train_test2(datapath, 'list0.pkl')
-    train_with_generator(datapath, 100, 400)
+    #separate_train_test2(datapath, 'list0.pkl')
+    train_with_generator(datapath, 100, 100)
