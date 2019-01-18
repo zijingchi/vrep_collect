@@ -5,7 +5,7 @@ import time
 import pickle
 from keras.models import load_model
 from processing.angle_dis import config_dis, obs_pt
-from train.training_imgless2 import model_with_config_n_target3
+from train.training_imgless2 import model_with_1dconv
 from vrep_data.vrep_with_policy1 import UR5DaggerSample
 import numpy as np
 
@@ -28,7 +28,7 @@ class PolicyEval(UR5DaggerSample):
             scene_path,
             modelweight
         )
-        self.model = model_with_config_n_target3(5)
+        self.model = model_with_1dconv(5)
         self.model.load_weights(modelweight)
 
     def reset(self):
@@ -37,9 +37,9 @@ class PolicyEval(UR5DaggerSample):
         while self.sim_running:
             self.stop_simulation()
 
-        self.target_joint_pos = np.array([0.2 * np.random.randn(), 0.05 * np.random.randn() - pi / 4,
-                                          0.1 * np.random.randn() - pi / 3, 0.2 * np.random.randn(),
-                                          0.15 * np.random.randn() + pi / 2])
+        self.target_joint_pos = np.array([0.05 * np.random.randn(), 0.01 * np.random.randn() - pi / 3,
+                                          0.05 * np.random.randn() - pi / 3, 0.01 * np.random.randn(),
+                                          0.01 * np.random.randn() + pi / 2])
 
         self.start_simulation()
         colcheck = self.set_obs_pos2()
@@ -71,20 +71,15 @@ class PolicyEval(UR5DaggerSample):
 
         self.set_joints(self.init_joint_pos)
         self.step_simulation()
-        self._ask_vrep()
+        found = self._ask_vrep()
+        return found
 
     def _ask_vrep(self):
-        if self.sim_running:
-            self.stop_simulation()
-        while self.sim_running:
-            self.stop_simulation()
-
-        self.start_simulation()
         found = False
         self.set_joints(self.init_joint_pos)
         self.step_simulation()
         clientID = self.cID
-        inFloats = self.init_joint_pos + self.target_joint_pos
+        inFloats = self.init_joint_pos + self.target_joint_pos.tolist()
         emptyBuff = bytearray()
         n_path, path, res = self._calPathThroughVrep(clientID, 400, inFloats, emptyBuff)
         if (res == 0) & (n_path != 0):
@@ -105,6 +100,7 @@ class PolicyEval(UR5DaggerSample):
             found = True
         if res == 3:
             time.sleep(5)
+        return found
 
     def step2(self, t):
         self.set_joints(self.path[t])
@@ -118,6 +114,7 @@ class PolicyEval(UR5DaggerSample):
         x1 = self._transpose(config)
         x2 = self._transpose(self.target_joint_pos[0:5])
         x3 = obs_pt(self.obstacle_pos, self.obstacle_ori)
+        x3.shape = (1, 8, 3)
         action = self.model.predict([x1, x2, x3])
         # action = action[0]
         action = np.deg2rad(action[0])
@@ -142,7 +139,7 @@ def main():
     homepath = path0[:path0.find('/', hi)]
     workpath = homepath + '/vrep_path_dataset/eval3/'
     path1 = path0[:path0.rfind('/')]
-    model_path = os.path.join(path1, 'train/h5files/model10_big_weights.h5')
+    model_path = os.path.join(path1, 'train/h5files/model_big_weights4.h5')
 
     if not os.path.exists(workpath):
         os.mkdir(workpath)
@@ -157,7 +154,7 @@ def main():
     nci = 0
     si = 0
     asi = 0
-    for i in range(maxdir+1, maxdir+150):
+    for i in range(maxdir+1, maxdir+80):
         print('iter:', i)
         collision = env.reset()
         if collision:
@@ -183,13 +180,14 @@ def main():
             os.mkdir(str(i) + '/abs')
             os.mkdir(str(i) + '/abs/img1')
             os.mkdir(str(i) + '/abs/img2')
-            env.reset2()
-            for t in range(60):
-                if t > env.n_path - 1:
-                    break
-                env.step2(t)
-                cv2.imwrite(str(i) + '/abs/img1/' + str(t) + '.jpg', env.observation['image1'])
-                cv2.imwrite(str(i) + '/abs/img2/' + str(t) + '.jpg', env.observation['image2'])
+            found = env.reset2()
+            if found:
+                for t in range(60):
+                    if t > env.n_path - 1:
+                        break
+                    env.step2(t)
+                    cv2.imwrite(str(i) + '/abs/img1/' + str(t) + '.jpg', env.observation['image1'])
+                    cv2.imwrite(str(i) + '/abs/img2/' + str(t) + '.jpg', env.observation['image2'])
         else:
             print("collision at initial or target pose")
     print('success rate:', nci, si, si/nci)

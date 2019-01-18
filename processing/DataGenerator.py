@@ -2,7 +2,7 @@ import numpy as np
 import keras
 # import os
 from processing.readDataFromFile import DataFromIndex
-from processing.angle_dis import obs_pt
+from processing.angle_dis import obs_pt2
 
 
 class CustomDataGenWthImg(keras.utils.Sequence):
@@ -86,7 +86,7 @@ class CustomDataGenWthTarCfg(keras.utils.Sequence):
         configs = np.empty((self.batch_size, 5), dtype=float)
         actions = np.empty((self.batch_size, 5), dtype=float)
         tar_pos_config = np.empty((self.batch_size, 5), dtype=float)
-        obstacle = np.empty((self.batch_size, 24), dtype=float)
+        obstacle = np.empty((self.batch_size, 8, 3), dtype=float)
         #obstacle_pos = np.empty((self.batch_size, 3), dtype=float)
         #obstacle_ori = np.empty((self.batch_size, 3), dtype=float)
 
@@ -94,7 +94,7 @@ class CustomDataGenWthTarCfg(keras.utils.Sequence):
             obs, act = self.datafromindex.read_per_index(ID)
             configs[i,] = obs['config']
             tar_pos_config[i,] = obs['tar_pos']
-            obstacle[i,] = obs_pt(obs['obstacle_pos'], obs['obstacle_ori'])
+            obstacle[i,] = obs_pt2(obs['obstacle_pos'], obs['obstacle_ori'])
             #obstacle_ori[i,] = obs['obstacle_ori']
             actions[i,] = act
 

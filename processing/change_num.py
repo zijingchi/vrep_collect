@@ -4,11 +4,12 @@ import numpy as np
 """
     REMEMBER TO CHECK IF THE DATAPATH IS WHAT YOU EXPECT!!!!!!!!!!
 """
-datapath = '/home/ubuntu/vdp/3'
+datapath = '/home/ubuntu/vdp/4'
 
 
 def change_name(datapath):
     dirlist = os.listdir(datapath)
+    dirlist.sort(key=lambda s: int(s))
     if 'list0.pkl' in dirlist:
         raise RuntimeError('not the new dataset!')
     s = 0

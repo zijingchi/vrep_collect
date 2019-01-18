@@ -15,7 +15,7 @@ from train.mdn import *
 from train.training_imgless2 import weighted_logcosh, model_with_config_n_target3
 
 l1_regu = 1e-16
-N_MIXES = 100
+N_MIXES = 10
 OUTPUT_DIMS = 5
 
 
@@ -57,10 +57,10 @@ def model_with_latentspace_mdn(dof):
 
 
 def train_with_generator(datapath, batch_size, epochs):
-    learning_rate = 1e-3  # 学习率
+    learning_rate = 2e-4  # 学习率
     lr_decay = 1e-3
     model = model_with_latentspace_mdn(5)
-    # model.load_weights('./h5files/5dof_latent_weights6.h5')
+    model.load_weights('./h5files/5dof_latent_mdn_weights4.h5')
     model.compile(loss=get_mixture_loss_func(OUTPUT_DIMS, N_MIXES),
                   optimizer=optimizers.Adam(lr=learning_rate, beta_1=0.9, beta_2=0.999, decay=lr_decay),
                   metrics=[get_mixture_mse_accuracy(OUTPUT_DIMS, N_MIXES)])
@@ -89,9 +89,9 @@ def train_with_generator(datapath, batch_size, epochs):
                                   workers=3)
     # K.clear_session()
     # model.save('./h5files/5dof_latent_6.h5')
-    model.save_weights('./h5files/5dof_latent_mdn_weights2.h5')
+    model.save_weights('./h5files/5dof_latent_mdn_weights5.h5')
 
 
 if __name__ == '__main__':
     datapath = '/home/ubuntu/vdp/3/'
-    train_with_generator(datapath, 64, 400)
+    train_with_generator(datapath, 100, 100)

@@ -5,7 +5,7 @@ import os
 import tensorflow as tf
 import pickle
 from keras.models import Model, load_model
-from keras.layers import BatchNormalization, Activation, Dense, Input, Dropout, Multiply
+from keras.layers import BatchNormalization, Activation, Dense, Input, Dropout, Multiply, Conv1D, Flatten
 from keras.layers.merge import Subtract, Concatenate
 from keras.callbacks import TensorBoard
 from keras.utils import plot_model
@@ -15,10 +15,10 @@ from processing.DataGenerator import CustomDataGenWthTarCfg
 from processing.angle_dis import metrics
 from train.fknodes import fktensor
 
-learning_rate = 8e-3         # 学习率
+learning_rate = 1e-2         # 学习率
 # learning_rate = 0.1
 lr_decay = 1e-3
-l1_regu = 5e-6
+l1_regu = 1e-4
 
 
 def fklayer(batch_size):
@@ -172,14 +172,14 @@ def model_with_config_n_target2(dof, batch_size):
     theta_sub = Subtract(name='target-config')([target, config])
     multi1 = Multiply(name='alpha_sub')([alpha, theta_sub])
 
-    o = Dense(128,
+    o = Dense(256,
               kernel_regularizer=regularizers.l1(l1_regu),
               bias_regularizer=regularizers.l1(l1_regu),
               name='obs-latent-dense1')(obstacle)
     o = BatchNormalization(name='obs-latent-bn1')(o)
     o = Activation('relu', name='obs-latent-relu1')(o)
-    o = Dense(64, activation='relu', name='obs-latent-dense2')(o)
-    o = Dense(32, activation='relu', name='obs-latent-dense3')(o)
+    o = Dense(128, activation='relu', name='obs-latent-dense2')(o)
+    o = Dense(64, activation='relu', name='obs-latent-dense3')(o)
     t = Dense(64, name='target-obs-dense1',
               kernel_regularizer=regularizers.l1(l1_regu),
               bias_regularizer=regularizers.l1(l1_regu))(target)
@@ -188,14 +188,14 @@ def model_with_config_n_target2(dof, batch_size):
     t = Dense(64, activation='relu', name='target-obs-dense2')(t)
     t = Dense(32, activation='relu', name='target-obs-dense3')(t)
     obs_all = Concatenate(name='obs-merge')([o, t])
-    obs_all = Dense(64, activation='relu',
+    obs_all = Dense(128, activation='relu',
                     name='obs-latent-dense4',
                     kernel_regularizer=regularizers.l1(l1_regu),
                     bias_regularizer=regularizers.l1(l1_regu))(obs_all)
     obs_all = Dense(64, activation='relu', name='obs-latent-dense5')(obs_all)
     obs_all = Dense(32, activation='relu', name='obs-latent-dense6')(obs_all)
 
-    latent_config = Dense(128,
+    latent_config = Dense(256,
                           kernel_regularizer=regularizers.l1(l1_regu),
                           bias_regularizer=regularizers.l1(l1_regu),
                           name='config2latent-dense1')(fkn)
@@ -203,13 +203,13 @@ def model_with_config_n_target2(dof, batch_size):
     latent_config = Activation('relu', name='config2latent-relu1')(latent_config)
     latent_config = Dense(32, activation='relu', name='config2latent-dense2')(latent_config)
     obs_sub = Subtract(name='config-obs')([latent_config, obs_all])
-    obs_sub = Dense(128,
+    obs_sub = Dense(256,
                     kernel_regularizer=regularizers.l1(l1_regu),
                     bias_regularizer=regularizers.l1(l1_regu),
                     name='obs-sub-dense1')(obs_sub)
     obs_sub = BatchNormalization(name='obs-sub-bn1')(obs_sub)
     obs_sub = Activation('relu', name='obs-sub-relu1')(obs_sub)
-    obs_sub = Dense(64, activation='relu',
+    obs_sub = Dense(128, activation='relu',
                     kernel_regularizer=regularizers.l1(l1_regu),
                     bias_regularizer=regularizers.l1(l1_regu),
                     name='obs-sub-dense2')(obs_sub)
@@ -217,19 +217,19 @@ def model_with_config_n_target2(dof, batch_size):
     multi2 = Multiply(name='beta_sub')([beta, obs_sub])
     latent_action = Concatenate(name='theta_obs')([multi1, multi2])
 
-    final = Dense(128, name='final-dense1',
+    final = Dense(256, name='final-dense1',
                   kernel_regularizer=regularizers.l1(4 * l1_regu))(latent_action)
     final = BatchNormalization(name='final-bn1')(final)
     final = Activation('relu', name='final-relu1')(final)
-    final = Dense(64, activation='relu',
+    final = Dense(128, activation='relu',
                   name='final-dense2',
                   kernel_regularizer=regularizers.l1(l1_regu),
                   bias_regularizer=regularizers.l1(l1_regu))(final)
     # final = Dropout(0.5, name='final-dp1')(final)
-    """final = Dense(32, activation='relu',
+    final = Dense(64, activation='relu',
                   name='final-dense3',
                   kernel_regularizer=regularizers.l1(l1_regu),
-                  bias_regularizer=regularizers.l1(l1_regu))(final)"""
+                  bias_regularizer=regularizers.l1(l1_regu))(final)
     # final = Dense(32, activation='relu', name='final-dense4')(final)
     final = Dense(dof, name='output')(final)
 
@@ -275,21 +275,24 @@ def model_with_config_n_target3(dof):
     alpha = Dense(256, name='alpha-dense1')(merge1)
     alpha = BatchNormalization(name='alpha-bn1')(alpha)
     alpha = Activation('relu', name='alpha-relu1')(alpha)
-    alpha = Dense(128, activation='relu',
+    alpha = Dense(128,
                   kernel_regularizer=regularizers.l1(l1_regu),
                   bias_regularizer=regularizers.l1(l1_regu),
                   name='alpha-dense2')(alpha)
-    alpha = Dropout(0.5, name='alpha-dp1')(alpha)
+    alpha = BatchNormalization(name='alpha-bn2')(alpha)
+    alpha = Activation('relu', name='alpha-relu2')(alpha)
     alpha = Dense(64, activation='relu', name='alpha-dense3')(alpha)
     alpha = Dense(5, name='alpha-final')(alpha)
 
     beta = Dense(256, name='beta-dense1')(merge1)
     beta = BatchNormalization(name='beta-bn1')(beta)
     beta = Activation('relu', name='beta-relu1')(beta)
-    beta = Dense(128, activation='relu',
+    beta = Dense(128,
                  kernel_regularizer=regularizers.l1(l1_regu),
                  bias_regularizer=regularizers.l1(l1_regu),
                  name='beta-dense2')(beta)
+    beta = BatchNormalization(name='beta-bn2')(beta)
+    beta = Activation('relu', name='beta-relu2')(beta)
     beta = Dropout(0.5, name='beta-dp1')(beta)
     beta = Dense(64, activation='relu', name='beta-dense3')(beta)
     beta = Dense(32, name='beta-final')(beta)
@@ -313,11 +316,15 @@ def model_with_config_n_target3(dof):
     t = Dense(64, activation='relu', name='target-obs-dense2')(t)
     t = Dense(32, activation='relu', name='target-obs-dense3')(t)
     obs_all = Concatenate(name='obs-merge')([o, t])
-    obs_all = Dense(512, activation='relu',
+    obs_all = Dense(512,
                     name='obs-latent-dense4',
                     kernel_regularizer=regularizers.l1(l1_regu),
                     bias_regularizer=regularizers.l1(l1_regu))(obs_all)
-    obs_all = Dense(128, activation='relu', name='obs-latent-dense5')(obs_all)
+    obs_all = BatchNormalization(name='obs_all-bn1')(obs_all)
+    obs_all = Activation('relu', name='obs_all-relu1')(obs_all)
+    obs_all = Dense(128, name='obs-latent-dense5')(obs_all)
+    obs_all = BatchNormalization(name='obs_all-bn2')(obs_all)
+    obs_all = Activation('relu', name='obs_all-relu2')(obs_all)
     obs_all = Dense(32, activation='relu', name='obs-latent-dense6')(obs_all)
 
     latent_config = Dense(512,
@@ -326,7 +333,9 @@ def model_with_config_n_target3(dof):
                           name='config2latent-dense1')(config)
     latent_config = BatchNormalization(name='config2latent-bn1')(latent_config)
     latent_config = Activation('relu', name='config2latent-relu1')(latent_config)
-    latent_config = Dense(128, activation='relu', name='config2latent-dense2')(latent_config)
+    latent_config = Dense(128, name='config2latent-dense2')(latent_config)
+    latent_config = BatchNormalization(name='config2latent-bn2')(latent_config)
+    latent_config = Activation('relu', name='config2latent-relu2')(latent_config)
     latent_config = Dense(32, activation='relu', name='config2latent-dense3')(latent_config)
     obs_sub = Concatenate(name='config-obs')([latent_config, obs_all])
     obs_sub = Dense(512,
@@ -335,10 +344,12 @@ def model_with_config_n_target3(dof):
                     name='obs-sub-dense1')(obs_sub)
     obs_sub = BatchNormalization(name='obs-sub-bn1')(obs_sub)
     obs_sub = Activation('relu', name='obs-sub-relu1')(obs_sub)
-    obs_sub = Dense(128, activation='relu',
+    obs_sub = Dense(128,
                     kernel_regularizer=regularizers.l1(l1_regu),
                     bias_regularizer=regularizers.l1(l1_regu),
                     name='obs-sub-dense2')(obs_sub)
+    obs_sub = BatchNormalization(name='obs-sub-bn2')(obs_sub)
+    obs_sub = Activation('relu', name='obs-sub-relu2')(obs_sub)
     obs_sub = Dense(32, activation='relu', name='obs-sub-dense3')(obs_sub)
     multi2 = Multiply(name='beta_sub')([beta, obs_sub])
     latent_action = Concatenate(name='theta_obs')([multi1, multi2])
@@ -347,11 +358,152 @@ def model_with_config_n_target3(dof):
                   kernel_regularizer=regularizers.l1(3*l1_regu))(latent_action)
     final = BatchNormalization(name='final-bn1')(final)
     final = Activation('relu', name='final-relu1')(final)
-    final = Dense(128, activation='relu',
-                  name='final-dense2',
+    final = Dense(256, name='final-dense2',
                   kernel_regularizer=regularizers.l1(l1_regu),
                   bias_regularizer=regularizers.l1(l1_regu))(final)
-    final = Dropout(0.5, name='final-dp1')(final)
+    final = BatchNormalization(name='final-bn2')(final)
+    final = Activation('relu', name='final-relu2')(final)
+
+    final = Dense(dof, name='output')(final)
+
+    model = Model(inputs=[config, target, obstacle],
+                  outputs=final)
+    return model
+
+
+def model_with_1dconv(dof):
+    config = Input(shape=(dof,), name='angles')
+    target = Input(shape=(dof,), name='target')
+    obstacle = Input(shape=(8, 3,), name='obstacle')
+    """config = Input(batch_shape=(batch_size, dof), name='angles')
+    target = Input(batch_shape=(batch_size, dof), name='target')
+    obstacle = Input(batch_shape=(batch_size, 24), name='obstacle')"""
+
+    x1 = Dense(128, name='config-dense1',
+               kernel_regularizer=regularizers.l1(l1_regu),
+               # bias_regularizer=regularizers.l2(l2_regu)
+               )(config)
+    x1 = BatchNormalization(name='config-bn1')(x1)
+    x1 = Activation('relu', name='config-relu1')(x1)
+    x1 = Dense(64, activation='relu', name='config-dense2')(x1)
+    x1 = Dense(32, name='config-dense3')(x1)
+    x2 = Dense(128, name='target-dense1',
+               kernel_regularizer=regularizers.l1(l1_regu),
+               # bias_regularizer=regularizers.l2(l2_regu)
+               )(target)
+    x2 = BatchNormalization(name='target-bn1')(x2)
+    x2 = Activation('relu', name='target-relu1')(x2)
+    x2 = Dense(64, activation='relu', name='target-dense2')(x2)
+    x2 = Dense(32, name='target-dense3')(x2)
+    x3 = Conv1D(filters=100, kernel_size=2, input_shape=(8, 3), name='obs-conv1')(obstacle)
+    """x3 = Dense(512, name='obs-dense1',
+               kernel_regularizer=regularizers.l1(l1_regu),
+               # bias_regularizer=regularizers.l2(l2_regu)
+               )(obstacle)"""
+    x3 = BatchNormalization(name='obs-bn1')(x3)
+    x3 = Activation('relu', name='obs-relu1')(x3)
+    x3 = Conv1D(100, 2, activation='relu', name='obs-conv2')(x3)
+    x3 = Conv1D(50, 2, activation='relu', name='obs-conv3')(x3)
+    x3 = Flatten(name='obs-flatten')(x3)
+    o = Dense(512,
+              kernel_regularizer=regularizers.l1(l1_regu),
+              bias_regularizer=regularizers.l1(l1_regu),
+              name='obs-latent-dense1')(x3)
+    x3 = Dense(128, activation='relu', name='obs-dense2')(x3)
+    x3 = Dense(32, name='obs-dense3')(x3)
+
+    merge1 = Concatenate(name='concat')([x1, x2, x3])
+    alpha = Dense(256, name='alpha-dense1')(merge1)
+    alpha = BatchNormalization(name='alpha-bn1')(alpha)
+    alpha = Activation('relu', name='alpha-relu1')(alpha)
+    alpha = Dense(128,
+                  kernel_regularizer=regularizers.l1(l1_regu),
+                  bias_regularizer=regularizers.l1(l1_regu),
+                  name='alpha-dense2')(alpha)
+    alpha = BatchNormalization(name='alpha-bn2')(alpha)
+    alpha = Activation('relu', name='alpha-relu2')(alpha)
+    alpha = Dense(64, activation='relu', name='alpha-dense3')(alpha)
+    alpha = Dense(5, name='alpha-final')(alpha)
+
+    beta = Dense(256, name='beta-dense1')(merge1)
+    beta = BatchNormalization(name='beta-bn1')(beta)
+    beta = Activation('relu', name='beta-relu1')(beta)
+    beta = Dense(128,
+                 kernel_regularizer=regularizers.l1(l1_regu),
+                 bias_regularizer=regularizers.l1(l1_regu),
+                 name='beta-dense2')(beta)
+    beta = BatchNormalization(name='beta-bn2')(beta)
+    beta = Activation('relu', name='beta-relu2')(beta)
+    beta = Dropout(0.5, name='beta-dp1')(beta)
+    beta = Dense(64, activation='relu', name='beta-dense3')(beta)
+    beta = Dense(32, name='beta-final')(beta)
+
+    theta_sub = Subtract(name='target-config')([target, config])
+    multi1 = Multiply(name='alpha_sub')([alpha, theta_sub])
+
+    """o = Dense(512,
+              kernel_regularizer=regularizers.l1(l1_regu),
+              bias_regularizer=regularizers.l1(l1_regu),
+              name='obs-latent-dense1')(obstacle)"""
+    o = BatchNormalization(name='obs-latent-bn1')(o)
+    o = Activation('relu', name='obs-latent-relu1')(o)
+    o = Dense(128, activation='relu', name='obs-latent-dense2')(o)
+    o = Dense(64, activation='relu', name='obs-latent-dense3')(o)
+    t = Dense(256, name='target-obs-dense1',
+              kernel_regularizer=regularizers.l1(l1_regu),
+              bias_regularizer=regularizers.l1(l1_regu))(target)
+    t = BatchNormalization(name='target-obs-bn1')(t)
+    t = Activation('relu', name='target-obs-relu')(t)
+    t = Dense(64, activation='relu', name='target-obs-dense2')(t)
+    t = Dense(32, activation='relu', name='target-obs-dense3')(t)
+    obs_all = Concatenate(name='obs-merge')([o, t])
+    obs_all = Dense(512,
+                    name='obs-latent-dense4',
+                    kernel_regularizer=regularizers.l1(l1_regu),
+                    bias_regularizer=regularizers.l1(l1_regu))(obs_all)
+    obs_all = BatchNormalization(name='obs_all-bn1')(obs_all)
+    obs_all = Activation('relu', name='obs_all-relu1')(obs_all)
+    obs_all = Dense(128, name='obs-latent-dense5')(obs_all)
+    obs_all = BatchNormalization(name='obs_all-bn2')(obs_all)
+    obs_all = Activation('relu', name='obs_all-relu2')(obs_all)
+    obs_all = Dense(32, activation='relu', name='obs-latent-dense6')(obs_all)
+
+    latent_config = Dense(512,
+                          kernel_regularizer=regularizers.l1(l1_regu),
+                          bias_regularizer=regularizers.l1(l1_regu),
+                          name='config2latent-dense1')(config)
+    latent_config = BatchNormalization(name='config2latent-bn1')(latent_config)
+    latent_config = Activation('relu', name='config2latent-relu1')(latent_config)
+    latent_config = Dense(128, name='config2latent-dense2')(latent_config)
+    latent_config = BatchNormalization(name='config2latent-bn2')(latent_config)
+    latent_config = Activation('relu', name='config2latent-relu2')(latent_config)
+    latent_config = Dense(32, activation='relu', name='config2latent-dense3')(latent_config)
+    obs_sub = Concatenate(name='config-obs')([latent_config, obs_all])
+    obs_sub = Dense(512,
+                    kernel_regularizer=regularizers.l1(l1_regu),
+                    bias_regularizer=regularizers.l1(l1_regu),
+                    name='obs-sub-dense1')(obs_sub)
+    obs_sub = BatchNormalization(name='obs-sub-bn1')(obs_sub)
+    obs_sub = Activation('relu', name='obs-sub-relu1')(obs_sub)
+    obs_sub = Dense(128,
+                    kernel_regularizer=regularizers.l1(l1_regu),
+                    bias_regularizer=regularizers.l1(l1_regu),
+                    name='obs-sub-dense2')(obs_sub)
+    obs_sub = BatchNormalization(name='obs-sub-bn2')(obs_sub)
+    obs_sub = Activation('relu', name='obs-sub-relu2')(obs_sub)
+    obs_sub = Dense(32, activation='relu', name='obs-sub-dense3')(obs_sub)
+    multi2 = Multiply(name='beta_sub')([beta, obs_sub])
+    latent_action = Concatenate(name='theta_obs')([multi1, multi2])
+
+    final = Dense(1024, name='final-dense1',
+                  kernel_regularizer=regularizers.l1(3*l1_regu))(latent_action)
+    final = BatchNormalization(name='final-bn1')(final)
+    final = Activation('relu', name='final-relu1')(final)
+    final = Dense(256, name='final-dense2',
+                  kernel_regularizer=regularizers.l1(l1_regu),
+                  bias_regularizer=regularizers.l1(l1_regu))(final)
+    final = BatchNormalization(name='final-bn2')(final)
+    final = Activation('relu', name='final-relu2')(final)
 
     final = Dense(dof, name='output')(final)
 
@@ -416,7 +568,7 @@ def separate_train_test2(datapath, listpkl, listpkl0=None):
 
 
 def train_with_generator(datapath, batch_size, epochs):
-    model = model_with_config_n_target3(5)
+    model = model_with_1dconv(5)
     # model.load_weights('./h5files/model10_14_weights.h5')
     model.compile(loss=weighted_logcosh,
                   optimizer=optimizers.Adam(lr=learning_rate, beta_1=0.9, beta_2=0.999, decay=lr_decay),
@@ -441,14 +593,13 @@ def train_with_generator(datapath, batch_size, epochs):
                                   epochs=epochs,
                                   validation_data=vali_gen,
                                   use_multiprocessing=True,
-                                  callbacks=[TensorBoard(log_dir='./tensorboard_logs/model10_big/log')],
+                                  callbacks=[TensorBoard(log_dir='./tensorboard_logs/model_big3/log')],
                                   workers=3)
     # K.clear_session()
     #model.save('./h5files/model10_5.h5')
-    model.save_weights('./h5files/model10_big_weights.h5')
+    model.save_weights('./h5files/model_big_weights3.h5')
 
 
 if __name__ == '__main__':
-    datapath = '/home/ubuntu/vdp/3/'
-    #separate_train_test2(datapath, 'list0.pkl')
-    train_with_generator(datapath, 100, 100)
+    datapath = '/home/ubuntu/vdp/4/'
+    train_with_generator(datapath, 72, 100)

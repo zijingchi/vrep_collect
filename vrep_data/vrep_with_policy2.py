@@ -3,14 +3,17 @@ import os
 import cv2
 import time
 import pickle
-from train.train_mdn1 import model_with_config_n_target
+from train.train_mdn1 import model_with_latentspace_mdn
+from processing.angle_dis import obs_pt
+from vrep_data.collect_from_vrep1 import UR5WithCameraSample
+from processing.fknodes import tipcoor
 from train.mdn import *
 import numpy as np
 
 pi = np.pi
 
 
-class UR5WithCameraSample(vrep_env.VrepEnv):
+class MDN_policy(UR5WithCameraSample):
     metadata = {'render.modes': [], }
 
     def __init__(
@@ -21,133 +24,22 @@ class UR5WithCameraSample(vrep_env.VrepEnv):
             modelweights=None
     ):
 
-        vrep_env.VrepEnv.__init__(
+        UR5WithCameraSample.__init__(
             self,
             server_addr,
             server_port,
             scene_path,
         )
 
-        # Settings
-        self.random_start = False
-
-        # All joints
-        ur5_joints = ['UR5_joint1', 'UR5_joint2', 'UR5_joint3', 'UR5_joint4', 'UR5_joint5', 'UR5_joint6']
-        # All shapes
-        # ur5_links_visible = ['UR5_link1_visible','UR5_link2_visible','UR5_link3_visible',
-        #	'UR5_link4_visible','UR5_link5_visible','UR6_link1_visible','UR5_link7_visible']
-
-        # Getting object handles
-        self.obstable = self.get_object_handle('Obstacle')
-        # Meta
-        self.camera1 = self.get_object_handle('camera1')
-        self.zfar1 = self.get_obj_float_parameter(self.camera1,
-                                                  vrep.sim_visionfloatparam_far_clipping)
-        self.znear1 = self.get_obj_float_parameter(self.camera1,
-                                                   vrep.sim_visionfloatparam_near_clipping)
-        self.camera2 = self.get_object_handle('camera2')
-        self.goal_viz = self.get_object_handle('Cuboid')
-        self.tip = self.get_object_handle('tip')
-        self.model = model_with_config_n_target()
+        self.model = model_with_latentspace_mdn(5)
         self.model.load_weights(modelweights)
-        h = 256
-        w = 256
-        c = 3
-        self.img_size = [h, w, c]
-        # self.target_joint_pos = [-pi/4, -pi/4, -pi/3, pi/8, pi/4, 0]
-
-        self.init_joint_pos = np.array([0, -pi / 12, -2 * pi / 3, 0, pi / 2, 0]) + 0.01 * np.random.randn(6)
-        # Actuators
-        self.oh_joint = list(map(self.get_object_handle, ur5_joints))
 
         print('UR5VrepEnv: initialized')
-
-    def _make_observation(self):
-        """Get observation from v-rep and stores in self.observation
-        """
-        img1 = self.obj_get_vision_image(self.camera1)
-        img2 = self.obj_get_vision_image(self.camera2)
-        img1 = np.flip(img1, 2)
-        img2 = np.flip(img2, 2)
-        joint_angles = [self.obj_get_joint_angle(joint) for joint in self.oh_joint]
-        depM1 = self._cal_depth(self.camera1, self.zfar1, self.znear1)
-
-        self.observation = {'joint': np.array(joint_angles).astype('float32'),
-                            'image1': img1, 'image2': img2}
-        # self.observation = np.array(joint_angles).astype('float32')
-
-    def _calPathThroughVrep(self, clientID, minConfigsForPathPlanningPath, inFloats, emptyBuff):
-        """send the signal to v-rep and retrieve the path tuple calculated by the v-rep script"""
-        maxConfigsForDesiredPose = 10  # we will try to find 10 different states corresponding to the goal pose and order them according to distance from initial state
-        maxTrialsForConfigSearch = 300  # a parameter needed for finding appropriate goal states
-        searchCount = 4  # how many times OMPL will run for a given task
-        # minConfigsForPathPlanningPath = 50  # interpolation states for the OMPL path
-        minConfigsForIkPath = 100  # interpolation states for the linear approach path
-        collisionChecking = 1  # whether collision checking is on or off
-        inInts = [collisionChecking, minConfigsForIkPath, minConfigsForPathPlanningPath,
-                  maxConfigsForDesiredPose, maxTrialsForConfigSearch, searchCount]
-        res, retInts, path, retStrings, retBuffer = vrep.simxCallScriptFunction(clientID,
-                                                                                'Dummy',
-                                                                                vrep.sim_scripttype_childscript,
-                                                                                'findPath_goalIsState',
-                                                                                inInts, inFloats, [], emptyBuff,
-                                                                                vrep.simx_opmode_oneshot_wait)
-        if (res == 0) and len(path) > 0:
-            n_path = retInts[0]
-        else:
-            n_path = 0
-        return n_path, path, res
-
-    def _checkInitCollision(self, clientID, emptyBuff):
-        res, retInts, path, retStrings, retBuffer = vrep.simxCallScriptFunction(clientID,
-                                                                                'Dummy',
-                                                                                vrep.sim_scripttype_childscript,
-                                                                                'checkCollision',
-                                                                                [], [], [], emptyBuff,
-                                                                                vrep.simx_opmode_oneshot_wait)
-        if res == 0:
-            return retInts[0]
-        else:
-            return -1
-
-    def _make_action(self, a):
-        """Send action to v-rep
-        """
-        newa = a + self.observation['joint']
-        self._set_joints(newa)
 
     def _cal_depth(self, chandle, zfar, znear):
         depmat = self.obj_get_depth_matrix(chandle)
         depmat = znear * np.ones(np.shape(depmat)) + (zfar - znear) * depmat
         return depmat
-
-    def _set_joints(self, angles):
-        for j, a in zip(self.oh_joint, angles):
-            self.obj_set_joint_position(j, a)
-
-    def set_obs_pos(self):
-        self._set_joints(self.target_joint_pos)
-
-        tip_pos = self.obj_get_position(self.tip)
-        tip_ori = self.obj_get_orientation(self.tip)
-        self.obj_set_position(self.goal_viz, tip_pos)
-        self.obj_set_orientation(self.goal_viz, tip_ori)
-        self.obstacle_pos = 0.8 * np.array(tip_pos) + np.array([0.1 * (0.5 - np.random.rand()),
-                                                                0.1 - 0.15 * np.random.rand(),
-                                                                0.3 + 0.2 * (0.5 - np.random.rand())])
-        # self.obstacle_pos = [0.15*np.random.randn()-0.1, 0.2*np.random.randn()-0.45, 0.1*np.random.randn()+0.42]
-        # self.obstacle_pos = np.array(self.obstacle_pos)
-        self.obj_set_position(self.obstable, self.obstacle_pos)
-        self.obstacle_ori = 0.3 * np.random.rand(3)
-        self.obj_set_orientation(self.obstable, self.obstacle_ori)
-        emptyBuff = bytearray()
-        colcheck1 = self._checkInitCollision(self.cID, emptyBuff)
-        self._set_joints(self.init_joint_pos)
-        colcheck2 = self._checkInitCollision(self.cID, emptyBuff)
-        if ((colcheck1 == 0) & (colcheck2 == 0)):
-            return 1
-        else:
-            return 0
 
     def _transpose(self, nparray):
         m = np.mat(nparray).T
@@ -158,18 +50,18 @@ class UR5WithCameraSample(vrep_env.VrepEnv):
         self._make_observation()  # make an observation
         # predict the action from the model
         config = self.observation['joint']
-        x1 = self._transpose(np.rad2deg(config))
-        x2 = self._transpose(np.rad2deg(self.target_joint_pos))
-        x3 = self._transpose(np.concatenate((self.obstacle_pos, self.obstacle_ori)))
+        x1 = self._transpose(config)
+        x2 = self._transpose(self.target_joint_pos)
+        x3 = self._transpose(obs_pt(self.obstacle_pos, self.obstacle_ori))
         param = self.model.predict([x1, x2, x3])
-        action = sample_from_output(param, 6, 35)
+        action = sample_from_output(param, 5, 10)
         # action = action[0]
         action = np.deg2rad(action[0])
         self._make_action(action)  # make the action
-        # ask the expert to give the right action if exists (here the expert is the ompl algorithm used in v-rep
-        inFloats = config.tolist() + self.target_joint_pos.tolist()
-        minConfigs = int(60 * np.linalg.norm(self.target_joint_pos - config) / 1.35)
         emptyBuff = bytearray()
+        # ask the expert to give the right action if exists (here the expert is the ompl algorithm used in v-rep
+        """inFloats = config.tolist() + self.target_joint_pos.tolist()
+        minConfigs = int(60 * np.linalg.norm(self.target_joint_pos - config) / 1.35)      
         n_path, path, res = self._calPathThroughVrep(self.cID, minConfigs, inFloats, emptyBuff)
         thresh = 0.06
         expert_action = -1
@@ -182,13 +74,38 @@ class UR5WithCameraSample(vrep_env.VrepEnv):
                     expert_action = p - config
                     break
         if res == 3:
-            time.sleep(3)
+            time.sleep(3)"""
         colcheck = self._checkInitCollision(self.cID, emptyBuff)
         amp_between = np.linalg.norm(self.target_joint_pos - config)
-        check = (amp_between < 0.2) or (colcheck == 1) or (expert_action == -1)
+        check = (amp_between < 0.2) or (colcheck == 1)
         self.step_simulation()
 
-        return action, expert_action, check
+        return action, check
+
+    def set_obs_pos2(self):
+        self.set_joints(self.init_joint_pos)
+        tip_pos = self.obj_get_position(self.tip)
+        alpha = np.random.rand()
+        self.obstacle_pos = alpha*np.array(tip_pos) + (1-alpha)*tipcoor(np.append(self.target_joint_pos, np.zeros(1)))
+        self.obstacle_pos[0] = self.obstacle_pos[0] + 0.05*np.random.randn()
+        self.obstacle_pos[1] = self.obstacle_pos[1] + 0.05*np.random.randn()
+        self.obstacle_pos[2] = self.obstacle_pos[2] + 0.15*(np.random.rand()+0.8)
+        self.obj_set_position(self.obstable, self.obstacle_pos)
+        self.obstacle_ori = 0.1 * np.random.rand(3)
+        self.obj_set_orientation(self.obstable, self.obstacle_ori)
+        emptyBuff = bytearray()
+        colcheck1 = self._checkInitCollision(self.cID, emptyBuff)
+
+        self.set_joints(self.target_joint_pos)
+        tip_pos = self.obj_get_position(self.tip)
+        tip_ori = self.obj_get_orientation(self.tip)
+        self.obj_set_position(self.goal_viz, tip_pos)
+        self.obj_set_orientation(self.goal_viz, tip_ori)
+        colcheck2 = self._checkInitCollision(self.cID, emptyBuff)
+        if ((colcheck1 == 0) & (colcheck2 == 0)):
+            return 1
+        else:
+            return 0
 
     def reset(self):
         if self.sim_running:
@@ -196,15 +113,16 @@ class UR5WithCameraSample(vrep_env.VrepEnv):
         while self.sim_running:
             self.stop_simulation()
 
-        self.target_joint_pos = np.array([0.2 * np.random.randn(), 0.1 * np.random.randn() - pi / 3,
+        self.target_joint_pos = np.array([0.2 * np.random.randn(), 0.1 * np.random.randn() - pi / 4,
                                           0.2 * np.random.randn() - pi / 3, 0.3 * np.random.randn(),
-                                          0.2 * np.random.randn() + pi / 2, 0])
+                                          0.2 * np.random.randn() + pi / 2])
 
         self.start_simulation()
-        colcheck = self.set_obs_pos()
+        colcheck = self.set_obs_pos2()
         self.inits = {'target_joint_pos': self.target_joint_pos,
                       'obstacle_pos': np.array(self.obstacle_pos),
                       'obstacle_ori': self.obstacle_ori}
+        self.set_joints(self.init_joint_pos)
         self.step_simulation()
         if colcheck == 1:
             self.current_state = self.init_joint_pos
@@ -219,18 +137,22 @@ class UR5WithCameraSample(vrep_env.VrepEnv):
 
 
 def main(args):
-    workpath = '/home/czj/vrep_path_dataset/15/'
-    model_weights = '/home/czj/vrep_path_dataset/model8_4_weights.h5'
+    path0 = os.getcwd()
+    hi = path0.find('home') + 5
+    homepath = path0[:path0.find('/', hi)]
+    workpath = homepath + '/vdp/mdn1/'
+    path1 = path0[:path0.rfind('/')]
+    model_weights = os.path.join(path1, 'train/h5files/5dof_latent_mdn_weights4.h5')
     if not os.path.exists(workpath):
         os.mkdir(workpath)
     dirlist = os.listdir(workpath)
-    numlist = [int(s) for s in dirlist]
+    numlist = [int(s) for s in dirlist if os.path.isdir(os.path.join(workpath, s))]
     if len(numlist) == 0:
         maxdir = -1
     else:
         maxdir = max(numlist)
     os.chdir(workpath)
-    env = UR5WithCameraSample(modelweights=model_weights)
+    env = MDN_policy(modelweights=model_weights)
     for i in range(maxdir + 1, maxdir + 20):
         print('iter:', i)
         collision = env.reset()
@@ -243,16 +165,16 @@ def main(args):
             acs = []
             exp_acs = []
             for t in range(60):
-                action, expert_action, check = env.step(t)
+                action, check = env.step(t)
                 if check:
                     break
                 obs.append(env.observation['joint'])
                 cv2.imwrite(str(i) + '/img1/' + str(t) + '.jpg', env.observation['image1'])
                 cv2.imwrite(str(i) + '/img2/' + str(t) + '.jpg', env.observation['image2'])
                 acs.append(action)
-                exp_acs.append(expert_action)
+                #exp_acs.append(expert_action)
                 env.current_state = env.observation
-            data = {'inits': env.inits, 'observations': obs, 'actions': exp_acs, 'policy': acs}
+            data = {'inits': env.inits, 'observations': obs, 'actions': acs}
             if len(obs) != 0:
                 with open(str(i) + '/data.pkl', 'wb') as f:
                     pickle.dump(data, f)
