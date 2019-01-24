@@ -7,7 +7,7 @@ import pickle
 from keras.models import Model, load_model
 from keras.layers import BatchNormalization, Activation, Dense, Input, Dropout, Multiply, Conv1D, Flatten
 from keras.layers.merge import Subtract, Concatenate
-from keras.callbacks import TensorBoard
+from keras.callbacks import TensorBoard, ModelCheckpoint
 from keras.utils import plot_model
 from keras import optimizers, losses, regularizers
 from keras.layers.core import Lambda
@@ -15,10 +15,10 @@ from processing.DataGenerator import CustomDataGenWthTarCfg
 from processing.angle_dis import metrics
 from train.fknodes import fktensor
 
-learning_rate = 1e-2         # 学习率
+learning_rate = 8e-3         # 学习率
 # learning_rate = 0.1
 lr_decay = 1e-3
-l1_regu = 1e-4
+l1_regu = 1e-3
 
 
 def fklayer(batch_size):
@@ -386,7 +386,7 @@ def model_with_1dconv(dof):
     x1 = BatchNormalization(name='config-bn1')(x1)
     x1 = Activation('relu', name='config-relu1')(x1)
     x1 = Dense(64, activation='relu', name='config-dense2')(x1)
-    x1 = Dense(32, name='config-dense3')(x1)
+    x1 = Dense(32, activation=None, name='config-dense3')(x1)
     x2 = Dense(128, name='target-dense1',
                kernel_regularizer=regularizers.l1(l1_regu),
                # bias_regularizer=regularizers.l2(l2_regu)
@@ -394,7 +394,7 @@ def model_with_1dconv(dof):
     x2 = BatchNormalization(name='target-bn1')(x2)
     x2 = Activation('relu', name='target-relu1')(x2)
     x2 = Dense(64, activation='relu', name='target-dense2')(x2)
-    x2 = Dense(32, name='target-dense3')(x2)
+    x2 = Dense(32, activation=None, name='target-dense3')(x2)
     x3 = Conv1D(filters=100, kernel_size=2, input_shape=(8, 3), name='obs-conv1')(obstacle)
     """x3 = Dense(512, name='obs-dense1',
                kernel_regularizer=regularizers.l1(l1_regu),
@@ -403,14 +403,14 @@ def model_with_1dconv(dof):
     x3 = BatchNormalization(name='obs-bn1')(x3)
     x3 = Activation('relu', name='obs-relu1')(x3)
     x3 = Conv1D(100, 2, activation='relu', name='obs-conv2')(x3)
-    x3 = Conv1D(50, 2, activation='relu', name='obs-conv3')(x3)
+    x3 = Conv1D(100, 2, activation='relu', name='obs-conv3')(x3)
     x3 = Flatten(name='obs-flatten')(x3)
     o = Dense(512,
               kernel_regularizer=regularizers.l1(l1_regu),
               bias_regularizer=regularizers.l1(l1_regu),
               name='obs-latent-dense1')(x3)
     x3 = Dense(128, activation='relu', name='obs-dense2')(x3)
-    x3 = Dense(32, name='obs-dense3')(x3)
+    x3 = Dense(32, activation=None, name='obs-dense3')(x3)
 
     merge1 = Concatenate(name='concat')([x1, x2, x3])
     alpha = Dense(256, name='alpha-dense1')(merge1)
@@ -423,20 +423,20 @@ def model_with_1dconv(dof):
     alpha = BatchNormalization(name='alpha-bn2')(alpha)
     alpha = Activation('relu', name='alpha-relu2')(alpha)
     alpha = Dense(64, activation='relu', name='alpha-dense3')(alpha)
-    alpha = Dense(5, name='alpha-final')(alpha)
+    alpha = Dense(5, activation='tanh', name='alpha-final')(alpha)
 
-    beta = Dense(256, name='beta-dense1')(merge1)
+    beta = Dense(512, name='beta-dense1')(merge1)
     beta = BatchNormalization(name='beta-bn1')(beta)
     beta = Activation('relu', name='beta-relu1')(beta)
-    beta = Dense(128,
+    beta = Dense(256,
                  kernel_regularizer=regularizers.l1(l1_regu),
                  bias_regularizer=regularizers.l1(l1_regu),
                  name='beta-dense2')(beta)
     beta = BatchNormalization(name='beta-bn2')(beta)
     beta = Activation('relu', name='beta-relu2')(beta)
-    beta = Dropout(0.5, name='beta-dp1')(beta)
-    beta = Dense(64, activation='relu', name='beta-dense3')(beta)
-    beta = Dense(32, name='beta-final')(beta)
+    #beta = Dropout(0.5, name='beta-dp1')(beta)
+    beta = Dense(256, activation='relu', name='beta-dense3')(beta)
+    beta = Dense(256, activation='tanh', name='beta-final')(beta)
 
     theta_sub = Subtract(name='target-config')([target, config])
     multi1 = Multiply(name='alpha_sub')([alpha, theta_sub])
@@ -447,15 +447,15 @@ def model_with_1dconv(dof):
               name='obs-latent-dense1')(obstacle)"""
     o = BatchNormalization(name='obs-latent-bn1')(o)
     o = Activation('relu', name='obs-latent-relu1')(o)
-    o = Dense(128, activation='relu', name='obs-latent-dense2')(o)
-    o = Dense(64, activation='relu', name='obs-latent-dense3')(o)
+    o = Dense(256, activation='relu', name='obs-latent-dense2')(o)
+    o = Dense(256, activation=None, name='obs-latent-dense3')(o)
     t = Dense(256, name='target-obs-dense1',
               kernel_regularizer=regularizers.l1(l1_regu),
               bias_regularizer=regularizers.l1(l1_regu))(target)
     t = BatchNormalization(name='target-obs-bn1')(t)
     t = Activation('relu', name='target-obs-relu')(t)
-    t = Dense(64, activation='relu', name='target-obs-dense2')(t)
-    t = Dense(32, activation='relu', name='target-obs-dense3')(t)
+    t = Dense(256, activation='relu', name='target-obs-dense2')(t)
+    t = Dense(256, activation=None, name='target-obs-dense3')(t)
     obs_all = Concatenate(name='obs-merge')([o, t])
     obs_all = Dense(512,
                     name='obs-latent-dense4',
@@ -463,10 +463,10 @@ def model_with_1dconv(dof):
                     bias_regularizer=regularizers.l1(l1_regu))(obs_all)
     obs_all = BatchNormalization(name='obs_all-bn1')(obs_all)
     obs_all = Activation('relu', name='obs_all-relu1')(obs_all)
-    obs_all = Dense(128, name='obs-latent-dense5')(obs_all)
+    obs_all = Dense(256, name='obs-latent-dense5')(obs_all)
     obs_all = BatchNormalization(name='obs_all-bn2')(obs_all)
     obs_all = Activation('relu', name='obs_all-relu2')(obs_all)
-    obs_all = Dense(32, activation='relu', name='obs-latent-dense6')(obs_all)
+    obs_all = Dense(256, name='obs-latent-dense6', activation=None)(obs_all)
 
     latent_config = Dense(512,
                           kernel_regularizer=regularizers.l1(l1_regu),
@@ -474,10 +474,10 @@ def model_with_1dconv(dof):
                           name='config2latent-dense1')(config)
     latent_config = BatchNormalization(name='config2latent-bn1')(latent_config)
     latent_config = Activation('relu', name='config2latent-relu1')(latent_config)
-    latent_config = Dense(128, name='config2latent-dense2')(latent_config)
+    latent_config = Dense(256, name='config2latent-dense2')(latent_config)
     latent_config = BatchNormalization(name='config2latent-bn2')(latent_config)
     latent_config = Activation('relu', name='config2latent-relu2')(latent_config)
-    latent_config = Dense(32, activation='relu', name='config2latent-dense3')(latent_config)
+    latent_config = Dense(256, name='config2latent-dense3', activation=None)(latent_config)
     obs_sub = Concatenate(name='config-obs')([latent_config, obs_all])
     obs_sub = Dense(512,
                     kernel_regularizer=regularizers.l1(l1_regu),
@@ -485,13 +485,13 @@ def model_with_1dconv(dof):
                     name='obs-sub-dense1')(obs_sub)
     obs_sub = BatchNormalization(name='obs-sub-bn1')(obs_sub)
     obs_sub = Activation('relu', name='obs-sub-relu1')(obs_sub)
-    obs_sub = Dense(128,
+    obs_sub = Dense(256,
                     kernel_regularizer=regularizers.l1(l1_regu),
                     bias_regularizer=regularizers.l1(l1_regu),
                     name='obs-sub-dense2')(obs_sub)
     obs_sub = BatchNormalization(name='obs-sub-bn2')(obs_sub)
     obs_sub = Activation('relu', name='obs-sub-relu2')(obs_sub)
-    obs_sub = Dense(32, activation='relu', name='obs-sub-dense3')(obs_sub)
+    obs_sub = Dense(256, activation=None, name='obs-sub-dense3')(obs_sub)
     multi2 = Multiply(name='beta_sub')([beta, obs_sub])
     latent_action = Concatenate(name='theta_obs')([multi1, multi2])
 
@@ -569,7 +569,7 @@ def separate_train_test2(datapath, listpkl, listpkl0=None):
 
 def train_with_generator(datapath, batch_size, epochs):
     model = model_with_1dconv(5)
-    # model.load_weights('./h5files/model10_14_weights.h5')
+    #model.load_weights('./h5files/model_big_weights3_1.h5')
     model.compile(loss=weighted_logcosh,
                   optimizer=optimizers.Adam(lr=learning_rate, beta_1=0.9, beta_2=0.999, decay=lr_decay),
                   metrics=['mse'])
@@ -589,17 +589,20 @@ def train_with_generator(datapath, batch_size, epochs):
                                       list_IDs=vali_list,
                                       data_size=50,
                                       batch_size=batch_size)
+    checkpoint = ModelCheckpoint(filepath='./h5files/model_conv1d_weights2.h5', monitor='val_mean_squared_error',
+                                 save_best_only=True, save_weights_only=True, mode='min')
+    tensorboard = TensorBoard(log_dir='./tensorboard_logs/model_big3_2/log')
     history = model.fit_generator(generator=train_gen,
                                   epochs=epochs,
                                   validation_data=vali_gen,
                                   use_multiprocessing=True,
-                                  callbacks=[TensorBoard(log_dir='./tensorboard_logs/model_big3/log')],
-                                  workers=3)
+                                  callbacks=[checkpoint, tensorboard],
+                                  workers=2)
     # K.clear_session()
     #model.save('./h5files/model10_5.h5')
-    model.save_weights('./h5files/model_big_weights3.h5')
+    model.save_weights('./h5files/model_big_weights3_2.h5')
 
 
 if __name__ == '__main__':
     datapath = '/home/ubuntu/vdp/4/'
-    train_with_generator(datapath, 72, 100)
+    train_with_generator(datapath, 72, 300)

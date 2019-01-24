@@ -91,6 +91,7 @@ class UR5WithCameraSample(vrep_env.VrepEnv):
         return n_path, path, res
 
     def _checkInitCollision(self, clientID, emptyBuff):
+        """returns 1 if collision occurred, 0 otherwise"""
         res, retInts, path, retStrings, retBuffer = vrep.simxCallScriptFunction(clientID,
                             'Dummy', vrep.sim_scripttype_childscript, 'checkCollision',
                             [], [], [], emptyBuff, vrep.simx_opmode_oneshot_wait)

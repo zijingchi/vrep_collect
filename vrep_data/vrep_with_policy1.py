@@ -93,7 +93,7 @@ class UR5DaggerSample(UR5WithCameraSample):
         minConfigs = int(200 * np.linalg.norm(self.target_joint_pos - config))
         emptyBuff = bytearray()
         n_path, path, res = self._calPathThroughVrep(self.cID, minConfigs, inFloats, emptyBuff)
-        thresh = 0.1
+        thresh = 0.4
         expert_action = []
         if (res == 0) & (n_path != 0):
             np_path = np.array(path)
@@ -108,7 +108,7 @@ class UR5DaggerSample(UR5WithCameraSample):
             print('timeout')
             time.sleep(6)
         colcheck = self._checkInitCollision(self.cID, emptyBuff)
-        amp_between = np.linalg.norm(self.target_joint_pos - config)
+        amp_between = config_dis(self.target_joint_pos, config)
 
         check = (amp_between < thresh) or (colcheck == 1) or (expert_action == [])
         if check:
@@ -156,9 +156,9 @@ def main(args):
     path0 = os.getcwd()
     hi = path0.find('home') + 5
     homepath = path0[:path0.find('/', hi)]
-    workpath = homepath+'/vdp/4_1/'
+    workpath = homepath+'/vdp/4_2/'
     path1 = path0[:path0.rfind('/')]
-    model_path = os.path.join(path1, 'train/h5files/model_big_weights3.h5')
+    model_path = os.path.join(path1, 'train/h5files/model_conv1d_weights1.h5')
     if not os.path.exists(workpath):
         os.mkdir(workpath)
     dirlist = os.listdir(workpath)
@@ -168,7 +168,7 @@ def main(args):
     else:
         maxdir = max(numlist)
     os.chdir(workpath)
-    env = UR5DaggerSample(modelfile=model_path)
+    env = UR5DaggerSample(modelfile=None)
     for i in range(maxdir+1, maxdir+50):
         print('iter:', i)
         collision = env.reset()
@@ -180,7 +180,7 @@ def main(args):
             obs = []
             acs = []
             exp_acs = []
-            for t in range(60):
+            for t in range(40):
                 action, expert_action, check = env.step(t)
                 if check:
                     break

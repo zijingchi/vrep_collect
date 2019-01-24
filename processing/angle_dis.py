@@ -44,7 +44,7 @@ def obs_pt2(pos, ori):
     s = 0.05
     l = 0.51
     h = 0.2
-    ps = 1/2 * np.array([[l, s], [l, -s], [-1, -s], [-1, s]])
+    ps = 1/2 * np.array([[s, l], [s, -l], [-s, -l], [-s, l]])
     ps = ps.transpose()
     P = np.empty((4, 8), dtype=np.double)
     for i in range(4):
@@ -52,6 +52,7 @@ def obs_pt2(pos, ori):
         P[:2, i+4] = ps[:, i]
     P[2, :4] = h/2 * np.ones((1, 4))
     P[2, 4:] = -h/2 * np.ones((1, 4))
+    # P[2, 4:] = np.zeros((1, 4))
     P[3, :] = np.ones((1, 8))
     R = euler2rotm(ori)
     pos.shape = (3, 1)
@@ -62,3 +63,4 @@ def obs_pt2(pos, ori):
     PafterT = PafterT[:3, :].transpose()
     #PafterT = np.reshape(PafterT, (1, -1))
     return PafterT
+
