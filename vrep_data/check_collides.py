@@ -39,8 +39,8 @@ class UR5ObsColCheck(UR5WithCameraSample):
         theta1_sample = np.linspace(theta1_left, theta1_right, 20)
         theta2_sample = np.linspace(theta2_left, theta2_right, 20)
         theta3_sample = np.linspace(theta3_left, theta3_right, 20)
-        theta4_sample = np.linspace(theta4_left, theta4_right, 4)
-        theta5_sample = np.linspace(theta5_left, theta5_right, 4)
+        theta4_sample = np.linspace(theta4_left, theta4_right, 3)
+        theta5_sample = np.linspace(theta5_left, theta5_right, 3)
 
         thetas_sample = []
         alpha = 1.2

@@ -41,11 +41,11 @@ class UR5DaggerSample(UR5WithCameraSample):
     def set_obs_pos2(self):
         self.set_joints(self.init_joint_pos)
         tip_pos = self.obj_get_position(self.tip)
-        alpha = np.random.rand()+0.2
+        alpha = np.random.rand()
         self.obstacle_pos = alpha * np.array(tip_pos) + (1 - alpha) * tipcoor(self.target_joint_pos.tolist() + [0])
-        self.obstacle_pos[0] = self.obstacle_pos[0] + 0.05 * np.random.randn()
-        self.obstacle_pos[1] = self.obstacle_pos[1] + 0.05 * np.random.randn()
-        self.obstacle_pos[2] = self.obstacle_pos[2] + 0.3 * (np.random.rand() + 0.3)
+        self.obstacle_pos[0] = self.obstacle_pos[0] + 0.15 * np.random.randn()
+        self.obstacle_pos[1] = self.obstacle_pos[1] + 0.15 * np.random.randn()
+        self.obstacle_pos[2] = self.obstacle_pos[2] + 0.4 * (np.random.rand() + 0.1)
         self.obj_set_position(self.obstable, self.obstacle_pos)
         self.obstacle_ori = 0.1 * np.random.rand(3)
         self.obstacle_ori[2] = self.obstacle_ori[2] + pi / 2
@@ -90,10 +90,11 @@ class UR5DaggerSample(UR5WithCameraSample):
 
         # ask the expert to give the right action if exists (here the expert is the ompl algorithm used in v-rep
         inFloats = config.tolist() + self.target_joint_pos.tolist()
-        minConfigs = int(200 * np.linalg.norm(self.target_joint_pos - config))
+        minConfigs = int(300 * np.linalg.norm(self.target_joint_pos - config))
         emptyBuff = bytearray()
         n_path, path, res = self._calPathThroughVrep(self.cID, minConfigs, inFloats, emptyBuff)
-        thresh = 0.4
+
+        thresh = 0.1
         expert_action = []
         if (res == 0) & (n_path != 0):
             np_path = np.array(path)
@@ -102,11 +103,12 @@ class UR5DaggerSample(UR5WithCameraSample):
                 n = config_dis(p, config)
                 if n > thresh:
                     expert_action = p - config
-                    #print(n)
                     break
-        if res == 3:
+        elif res == 3:
             print('timeout')
             time.sleep(6)
+        else:
+            print('no')
         colcheck = self._checkInitCollision(self.cID, emptyBuff)
         amp_between = config_dis(self.target_joint_pos, config)
 
@@ -118,8 +120,8 @@ class UR5DaggerSample(UR5WithCameraSample):
                 print('colliding')
             if expert_action == []:
                 print('expert action not found')
-        #else:
-        #    self._make_action(expert_action)
+        else:
+            self._make_action(expert_action)
 
         self.step_simulation()
 
@@ -156,7 +158,7 @@ def main(args):
     path0 = os.getcwd()
     hi = path0.find('home') + 5
     homepath = path0[:path0.find('/', hi)]
-    workpath = homepath+'/vdp/4_2/'
+    workpath = homepath+'/vdp/4_3/'
     path1 = path0[:path0.rfind('/')]
     model_path = os.path.join(path1, 'train/h5files/model_conv1d_weights1.h5')
     if not os.path.exists(workpath):
@@ -169,7 +171,7 @@ def main(args):
         maxdir = max(numlist)
     os.chdir(workpath)
     env = UR5DaggerSample(modelfile=None)
-    for i in range(maxdir+1, maxdir+50):
+    for i in range(maxdir+1, maxdir+350):
         print('iter:', i)
         collision = env.reset()
         if collision:
@@ -180,7 +182,7 @@ def main(args):
             obs = []
             acs = []
             exp_acs = []
-            for t in range(40):
+            for t in range(50):
                 action, expert_action, check = env.step(t)
                 if check:
                     break

@@ -48,8 +48,9 @@ class UR5WithCameraSample(vrep_env.VrepEnv):
         self.goal_viz = self.get_object_handle('Cuboid')
         self.tip = self.get_object_handle('tip')
         self.init_joint_pos = [0, -pi / 12, -3 * pi / 4, 0, pi / 2]
+        init_w = [1., 0.1, 0.2, 0.3, 0.3]
         for i in range(len(self.init_joint_pos)-1):
-            self.init_joint_pos[i] = self.init_joint_pos[i] + 0.15 * np.random.randn()
+            self.init_joint_pos[i] = self.init_joint_pos[i] + init_w[i] * np.random.randn()
         h = 256
         w = 256
         c = 3
@@ -75,7 +76,7 @@ class UR5WithCameraSample(vrep_env.VrepEnv):
         """send the signal to v-rep and retrieve the path tuple calculated by the v-rep script"""
         maxConfigsForDesiredPose = 10  # we will try to find 10 different states corresponding to the goal pose and order them according to distance from initial state
         maxTrialsForConfigSearch = 300  # a parameter needed for finding appropriate goal states
-        searchCount = 8  # how many times OMPL will run for a given task
+        searchCount = 3  # how many times OMPL will run for a given task
         # minConfigsForPathPlanningPath = 50  # interpolation states for the OMPL path
         minConfigsForIkPath = 100  # interpolation states for the linear approach path
         collisionChecking = 1  # whether collision checking is on or off
@@ -84,8 +85,12 @@ class UR5WithCameraSample(vrep_env.VrepEnv):
         res, retInts, path, retStrings, retBuffer = vrep.simxCallScriptFunction(clientID,
                             'Dummy', vrep.sim_scripttype_childscript, 'findPath_goalIsState',
                             inInts, inFloats, [], emptyBuff, vrep.simx_opmode_oneshot_wait)
+        """retInts, path, retStrings, retBuffer = self.call_childscript_function('Dummy', 'findPath_goalIsState', 
+                                                                              [inInts, inFloats, [], emptyBuff])"""
+        #length = 0
         if (res == 0) and len(path) > 0:
             n_path = retInts[0]
+            #length = retInts[2]
         else:
             n_path = 0
         return n_path, path, res
@@ -143,7 +148,7 @@ class UR5WithCameraSample(vrep_env.VrepEnv):
         self.obstacle_pos = alpha*np.array(tip_pos) + (1-alpha)*tipcoor(self.target_joint_pos + [0])
         self.obstacle_pos[0] = self.obstacle_pos[0] + 0.15*np.random.randn()
         self.obstacle_pos[1] = self.obstacle_pos[1] + 0.05*np.random.randn()
-        self.obstacle_pos[2] = self.obstacle_pos[2] + 0.15*(np.random.rand()+0.9)
+        self.obstacle_pos[2] = self.obstacle_pos[2] + 0.15*(np.random.rand()+0.3)
         self.obj_set_position(self.obstable, self.obstacle_pos)
         self.obstacle_ori = 0.05 * np.random.rand(3)
         self.obstacle_ori[2] = self.obstacle_ori[2] + pi / 2
