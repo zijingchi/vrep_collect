@@ -5,18 +5,19 @@ import os
 # import tensorflow as tf
 import pickle
 from keras.models import Model, load_model, model_from_json
-from keras.layers import BatchNormalization, Activation, Dense, Input, Dropout, Multiply
+from keras.layers import BatchNormalization, Activation, Dense, Input, Dropout, Multiply, Add
 from keras.layers.merge import Subtract, Concatenate
-from keras.callbacks import TensorBoard, TerminateOnNaN
+from keras.callbacks import TensorBoard, TerminateOnNaN, ModelCheckpoint
 from keras.utils import plot_model
 from keras import optimizers, losses, regularizers
 from processing.DataGenerator import CustomDataGenWthTarCfg
 from train.mdn import *
-from train.training_imgless2 import weighted_logcosh, model_with_config_n_target3
+from train.training_imgless2 import weighted_logcosh, model_with_1dconv
+from train.training_imgless import model_with_config_n_target2
 
 l1_regu = 1e-16
-N_MIXES = 10
-OUTPUT_DIMS = 5
+N_MIXES = 15
+OUTPUT_DIMS = 3
 
 
 def fdlp4theta(dof):
@@ -41,14 +42,17 @@ def fdlp4theta(dof):
 def model_with_latentspace_mdn(dof):
     config = Input(shape=(dof,), name='angles')
     target = Input(shape=(dof,), name='target')
-    obstacle = Input(shape=(24,), name='obstacle')
+    #obstacle = Input(shape=(8, 3, ), name='obstacle')
+    obstacle_pos = Input(shape=(3,), name='obs-pos')
+    obstacle_ori = Input(shape=(3,), name='obs-ori')
 
-    big_model = model_with_config_n_target3(dof)
-    final = big_model([config, target, obstacle])
+    big_model = model_with_config_n_target2(dof)
+    act1 = big_model([config, target, obstacle_pos, obstacle_ori])
 
-    final_output = MDN(OUTPUT_DIMS, N_MIXES)(final)
+    act1_param = MDN(OUTPUT_DIMS, N_MIXES)(act1)
+    final_output = act1_param
 
-    model = Model(inputs=[config, target, obstacle],
+    model = Model(inputs=[config, target, obstacle_pos, obstacle_ori],
                   outputs=final_output)
     """model.compile(loss=weighted_logcosh,
                   optimizer=optimizers.Adam(lr=learning_rate, beta_1=0.9, beta_2=0.999, decay=lr_decay),
@@ -56,11 +60,11 @@ def model_with_latentspace_mdn(dof):
     return model
 
 
-def train_with_generator(datapath, batch_size, epochs):
-    learning_rate = 2e-4  # 学习率
+def train_with_generator(datapath, batch_size, epochs, dof):
+    learning_rate = 1e-3  # 学习率
     lr_decay = 1e-3
-    model = model_with_latentspace_mdn(5)
-    model.load_weights('./h5files/5dof_latent_mdn_weights4.h5')
+    model = model_with_latentspace_mdn(dof)
+    #model.load_weights('./h5files/5dof_latent_mdn_weights8.h5')
     model.compile(loss=get_mixture_loss_func(OUTPUT_DIMS, N_MIXES),
                   optimizer=optimizers.Adam(lr=learning_rate, beta_1=0.9, beta_2=0.999, decay=lr_decay),
                   metrics=[get_mixture_mse_accuracy(OUTPUT_DIMS, N_MIXES)])
@@ -74,24 +78,27 @@ def train_with_generator(datapath, batch_size, epochs):
 
     train_gen = CustomDataGenWthTarCfg(datapath=datapath,
                                        list_IDs=train_list,
-                                       data_size=50,
+                                       data_size=dof,
                                        batch_size=batch_size)
     vali_gen = CustomDataGenWthTarCfg(datapath=datapath,
                                       list_IDs=vali_list,
-                                      data_size=50,
+                                      data_size=dof,
                                       batch_size=batch_size)
+    checkpoint = ModelCheckpoint(filepath='./h5files/3mid_sub_mdn_weights10.h5', monitor='val_mse_func',
+                                 save_best_only=True, save_weights_only=True, mode='min')
     history = model.fit_generator(generator=train_gen,
                                   epochs=epochs,
                                   validation_data=vali_gen,
                                   use_multiprocessing=True,
-                                  callbacks=[TensorBoard(log_dir='./tensorboard_logs/5dof_latent_mdn2/log'),
-                                             TerminateOnNaN()],
-                                  workers=3)
+                                  callbacks=[TensorBoard(log_dir='./tensorboard_logs/3dof_latent_mdn10/log'),
+                                             TerminateOnNaN(),
+                                             checkpoint],
+                                  workers=2)
     # K.clear_session()
     # model.save('./h5files/5dof_latent_6.h5')
-    model.save_weights('./h5files/5dof_latent_mdn_weights5.h5')
+    model.save_weights('./h5files/3dof_latent_mdn_weights10.h5')
 
 
 if __name__ == '__main__':
-    datapath = '/home/ubuntu/vdp/3/'
-    train_with_generator(datapath, 100, 100)
+    datapath = '/home/ubuntu/vdp/4_3/'
+    train_with_generator(datapath, 60, 150, OUTPUT_DIMS)

@@ -4,7 +4,6 @@ import cv2
 import time
 import pickle
 from keras.models import load_model
-#from train.training_imgless2 import model_with_1dconv
 from train.training_imgless import model_with_config_n_target2
 from processing.angle_dis import obs_pt2, config_dis
 from processing.fknodes import tipcoor
@@ -41,6 +40,35 @@ class UR5DaggerSample(UR5WithCameraSample):
 
         print('UR5DaggerSample: initialized')
 
+    def set_obs_pos2(self):
+        self.set_joints(self.init_joint_pos)
+        tip_pos = self.obj_get_position(self.tip)
+        alpha = np.random.rand()
+        self.obstacle_pos = alpha * np.array(tip_pos) + (1 - alpha) * tipcoor(self.target_joint_pos.tolist() + [0])
+        self.obstacle_pos[0] = self.obstacle_pos[0] + 0.15 * np.random.randn()
+        self.obstacle_pos[1] = self.obstacle_pos[1] + 0.15 * np.random.randn()
+        self.obstacle_pos[2] = self.obstacle_pos[2] + 0.4 * (np.random.rand() + 0.1)
+        self.obj_set_position(self.obstable, self.obstacle_pos)
+        self.obstacle_ori = 0.1 * np.random.rand(3)
+        self.obstacle_ori[2] = self.obstacle_ori[2] + pi / 2
+        self.obj_set_orientation(self.obstable, self.obstacle_ori)
+        emptyBuff = bytearray()
+        colcheck1 = self._checkInitCollision(self.cID, emptyBuff)
+
+        self.set_joints(self.target_joint_pos)
+        tip_pos = self.obj_get_position(self.tip)
+        tip_ori = self.obj_get_orientation(self.tip)
+        tip_obs_col = (tip_pos[2] < self.obstacle_pos[2] + 0.15) & (tip_pos[1] <
+                       self.obstacle_pos[1] + 0.04) & (tip_pos[1] > self.obstacle_pos[1] - 0.04) & (tip_pos[0] <
+                       self.obstacle_pos[0] + 0.27) & (tip_pos[0] > self.obstacle_pos[0] - 0.27)
+        self.obj_set_position(self.goal_viz, tip_pos)
+        self.obj_set_orientation(self.goal_viz, tip_ori)
+        colcheck2 = self._checkInitCollision(self.cID, emptyBuff)
+        if (colcheck1 == 0) & (colcheck2 == 0) & (not tip_obs_col):
+            return 1
+        else:
+            return 0
+
     def _transpose(self, nparray):
         m = np.mat(nparray).T
         m.shape = (1, nparray.size)
@@ -58,15 +86,13 @@ class UR5DaggerSample(UR5WithCameraSample):
             x2 = self._transpose(self.target_joint_pos)
             x3 = self._transpose(self.obstacle_pos)
             x4 = self._transpose(self.obstacle_ori)
-            #x3 = self._transpose(np.concatenate((self.obstacle_pos, self.obstacle_ori)))
             #x3 = obs_pt2(self.obstacle_pos, self.obstacle_ori)
             #x3.shape = (1, 8, 3)
             action = self.model.predict([x1, x2, x3, x4])
+            #action = action[0]
             action = np.deg2rad(action[0])
-            action = 1.5*action + thresh * (self.target_joint_pos - config)/config_dis(self.target_joint_pos, config)
-
+            action = action + 2 * thresh * (self.target_joint_pos - config) / config_dis(self.target_joint_pos, config)
             self._make_action(action)   # make the action
-            self.step_simulation()
 
         colcheck = self._checkInitCollision(self.cID, emptyBuff)
         amp_between = config_dis(self.target_joint_pos, config)
@@ -98,8 +124,13 @@ class UR5DaggerSample(UR5WithCameraSample):
                 print('no')
 
             check = (amp_between < thresh) or (colcheck == 1) or (expert_action == [])
-            if not expert_action:
-                print('expert action not found')
+            if check:
+                if amp_between < thresh:
+                    print('reaching')
+                if colcheck == 1:
+                    print('colliding')
+                if expert_action == []:
+                    print('expert action not found')
             #else:
             #    self._make_action(expert_action)
 
@@ -107,21 +138,19 @@ class UR5DaggerSample(UR5WithCameraSample):
 
         return action, expert_action, check
 
-    def reset(self):
+    def reset2(self, tar_pos, init_pos, obs_pos, obs_ori):
         if self.sim_running:
             self.stop_simulation()
         while self.sim_running:
             self.stop_simulation()
 
-        self.target_joint_pos = np.array([0.2*np.random.randn(), 0.1*np.random.randn()-pi/3,
-        0.2*np.random.randn()-pi/3, 0.3*np.random.randn(), 0.2*np.random.randn()+pi/2])
-        
+        self.target_joint_pos = tar_pos
+        self.init_joint_pos = init_pos
         self.start_simulation()
-        colcheck = self.set_obs_pos2()
+        self.obstacle_pos = obs_pos
+        self.obstacle_ori = obs_ori
+        colcheck = self.set_obs_pos3(obs_pos, obs_ori)
 
-        self.inits = {'target_joint_pos': self.target_joint_pos,
-                      'obstacle_pos': np.array(self.obstacle_pos),
-                      'obstacle_ori': self.obstacle_ori}
         self.step_simulation()
         if colcheck == 1:
             self.current_state = self.init_joint_pos
@@ -138,51 +167,36 @@ def main(args):
     path0 = os.getcwd()
     hi = path0.find('home') + 5
     homepath = path0[:path0.find('/', hi)]
-    workpath = homepath+'/vdp/4_5/'
+    workpath = homepath+'/vdp/4_3/'
     path1 = path0[:path0.rfind('/')]
     model_path = os.path.join(path1, 'train/h5files/5dof_model4.h5')
     if not os.path.exists(workpath):
         os.mkdir(workpath)
     dirlist = os.listdir(workpath)
-    numlist = [int(s) for s in dirlist if os.path.isdir(os.path.join(workpath, s))]
-    if len(numlist) == 0:
-        maxdir = -1
-    else:
-        maxdir = max(numlist)
+    if len(dirlist) == 0:
+        return -1
     os.chdir(workpath)
     askvrep = False
     env = UR5DaggerSample(modelfile=model_path, askvrep=askvrep)
-    i = maxdir + 1
-    while i < maxdir + 20:
-        print('iter:', i)
-        collision = env.reset()
+    for i in range(55, 75):
+        subpath = dirlist[i]
+        print('item:', subpath)
+        pklfile = subpath + '/data.pkl'
+        if not os.path.exists(pklfile):
+            continue
+        with open(pklfile, 'rb') as f:
+            data = pickle.load(f)
+            inits = data['inits']
+            init_pos = data['observations'][0]
+            collision = env.reset2(inits['target_joint_pos'],
+                                   init_pos,
+                                   inits['obstacle_pos'],
+                                   inits['obstacle_ori'])
         if collision:
-            if not os.path.exists(os.path.join(workpath, str(i))):
-                os.mkdir(str(i))
-                os.mkdir(str(i) + '/img1')
-                os.mkdir(str(i) + '/img2')
-            obs = []
-            acs = []
-            exp_acs = []
             for t in range(50):
                 action, expert_action, check = env.step(t)
                 if check:
                     break
-                obs.append(env.observation['joint'])
-                cv2.imwrite(str(i)+'/img1/'+str(t)+'.jpg', env.observation['image1'])
-                cv2.imwrite(str(i)+'/img2/'+str(t)+'.jpg', env.observation['image2'])
-                acs.append(action)
-                if askvrep:
-                    exp_acs.append(expert_action)
-                env.current_state = env.observation['joint']
-            if askvrep:
-                data = {'inits': env.inits, 'observations': obs, 'actions': exp_acs, 'policy': acs}
-            else:
-                data = {'inits': env.inits, 'observations': obs, 'actions': acs}
-            if len(obs) != 0:
-                with open(str(i)+'/data.pkl', 'wb') as f:
-                    pickle.dump(data, f)
-            i = i + 1
         else:
             print("collision at initial or target pose")
     # print("Episode finished after {} timesteps.\tTotal reward: {}".format(t+1,total_reward))

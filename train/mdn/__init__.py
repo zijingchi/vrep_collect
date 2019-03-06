@@ -68,6 +68,33 @@ class MDN(Layer):
         return dict(list(base_config.items()) + list(config.items()))
 
 
+class subMDN(MDN):
+
+    def __init__(self, output_dimension, num_mixtures, **kwargs):
+        with tf.name_scope('subMDN'):
+            self.betas = Dense(1, activation='relu', name='mdn_betas')
+        super(subMDN, self).__init__(output_dimension, num_mixtures, **kwargs)
+
+    def build(self, input_shape):
+        super(subMDN, self).build(input_shape)
+        self.betas.build(input_shape)
+        self.trainable_weights = self.trainable_weights + self.betas.trainable_weights
+        self.non_trainable_weights = self.non_trainable_weights + self.betas.non_trainable_weights
+
+    def call(self, x, mask=None):
+        with tf.name_scope('subMDN'):
+            sub_mdn_out = keras.layers.concatenate([self.mdn_mus(x),
+                                                    self.mdn_sigmas(x),
+                                                    self.mdn_pi(x),
+                                                    self.betas(x)],
+                                                   name='mdn_outputs')
+        return sub_mdn_out
+
+    def compute_output_shape(self, input_shape):
+        """Returns output shape, showing the number of mixture parameters."""
+        return (input_shape[0], (2 * self.output_dim * self.num_mix) + self.num_mix + 1)
+
+
 def get_mixture_loss_func(output_dim, num_mixes):
     """Construct a loss functions for the MDN layer parametrised by number of mixtures."""
     # Construct a loss function with the right number of mixtures and outputs
@@ -89,6 +116,42 @@ def get_mixture_loss_func(output_dim, num_mixes):
                 in zip(mus, sigs)]
         mixture = tfd.Mixture(cat=cat, components=coll)
         loss = mixture.log_prob(y_true)
+        loss = tf.negative(loss)
+        loss = tf.reduce_mean(loss)
+        return loss
+
+    # Actually return the loss_func
+    with tf.name_scope('MDN'):
+        return loss_func
+
+
+def get_sub_mdn_loss_func(output_dim, num_mixes):
+    """Construct a loss functions for the MDN layer parametrised by number of mixtures."""
+    # Construct a loss function with the right number of mixtures and outputs
+    def loss_func(y_true, y_pred):
+        # Reshape inputs in case this is used in a TimeDistribued layer
+        num_mdn_param = (2 * num_mixes * output_dim) + num_mixes
+        y_pred = tf.reshape(y_pred, [-1, num_mdn_param + output_dim + 1], name='reshape_ypreds')
+        beta_pred = y_pred[0, -1]
+        a_pred = y_pred[:, :num_mdn_param]
+        sub = y_pred[:, num_mdn_param:-1]
+        y_true = tf.reshape(y_true, [-1, output_dim], name='reshape_ytrue')
+        # Split the inputs into paramaters
+        out_mu, out_sigma, out_pi = tf.split(a_pred, num_or_size_splits=[num_mixes * output_dim,
+                                                                         num_mixes * output_dim,
+                                                                         num_mixes],
+                                             axis=-1, name='mdn_coef_split')
+        to_goal = tf.math.scalar_mul(beta_pred, sub)
+        a_cal = y_true - to_goal
+        # Construct the mixture models
+        cat = tfd.Categorical(logits=out_pi)
+        component_splits = [output_dim] * num_mixes
+        mus = tf.split(out_mu, num_or_size_splits=component_splits, axis=1)
+        sigs = tf.split(out_sigma, num_or_size_splits=component_splits, axis=1)
+        coll = [tfd.MultivariateNormalDiag(loc=loc, scale_diag=scale) for loc, scale
+                in zip(mus, sigs)]
+        mixture = tfd.Mixture(cat=cat, components=coll)
+        loss = mixture.log_prob(a_cal)
         loss = tf.negative(loss)
         loss = tf.reduce_mean(loss)
         return loss
@@ -126,6 +189,40 @@ def get_mixture_sampling_fun(output_dim, num_mixes):
         return sampling_func
 
 
+def get_submdn_sampling_fun(output_dim, num_mixes):
+    """Construct a TensorFlor sampling operation for the MDN layer parametrised
+    by mixtures and output dimension. This can be used in a Keras model to
+    generate samples directly."""
+
+    def sampling_func(y_pred):
+        num_mdn_param = (2 * num_mixes * output_dim) + num_mixes
+        y_pred = tf.reshape(y_pred, [-1, num_mdn_param + output_dim + 1], name='reshape_ypreds')
+        beta_pred = y_pred[0, -1]
+        a_pred = y_pred[:, :num_mdn_param]
+        sub = y_pred[:, num_mdn_param:-1]
+        # Split the inputs into paramaters
+        out_mu, out_sigma, out_pi = tf.split(a_pred, num_or_size_splits=[num_mixes * output_dim,
+                                                                         num_mixes * output_dim,
+                                                                         num_mixes],
+                                             axis=-1, name='mdn_coef_split')
+        to_goal = tf.math.scalar_mul(beta_pred, sub)
+        # Construct the mixture models
+        cat = tfd.Categorical(logits=out_pi)
+        component_splits = [output_dim] * num_mixes
+        mus = tf.split(out_mu, num_or_size_splits=component_splits, axis=1)
+        sigs = tf.split(out_sigma, num_or_size_splits=component_splits, axis=1)
+        coll = [tfd.MultivariateNormalDiag(loc=loc, scale_diag=scale) for loc, scale
+                in zip(mus, sigs)]
+        mixture = tfd.Mixture(cat=cat, components=coll)
+        samp = mixture.sample()
+        # Todo: temperature adjustment for sampling function.
+        return samp + to_goal
+
+    # Actually return the loss_func
+    with tf.name_scope('MDNLayer'):
+        return sampling_func
+
+
 def get_mixture_mse_accuracy(output_dim, num_mixes):
     """Construct an MSE accuracy function for the MDN layer
     that takes one sample and compares to the true value."""
@@ -147,6 +244,42 @@ def get_mixture_mse_accuracy(output_dim, num_mixes):
         mixture = tfd.Mixture(cat=cat, components=coll)
         samp = mixture.sample()
         mse = tf.reduce_mean(tf.square(samp - y_true), axis=-1)
+        # Todo: temperature adjustment for sampling functon.
+        return mse
+
+    # Actually return the loss_func
+    with tf.name_scope('MDNLayer'):
+        return mse_func
+
+
+def get_submdn_mse_accuracy(output_dim, num_mixes):
+    """Construct an MSE accuracy function for the MDN layer
+    that takes one sample and compares to the true value."""
+    # Construct a loss function with the right number of mixtures and outputs
+    def mse_func(y_true, y_pred):
+        # Reshape inputs in case this is used in a TimeDistribued layer
+        num_mdn_param = (2 * num_mixes * output_dim) + num_mixes
+        y_pred = tf.reshape(y_pred, [-1, num_mdn_param + output_dim + 1], name='reshape_ypreds')
+        beta_pred = y_pred[0, -1]
+        a_pred = y_pred[:, :num_mdn_param]
+        sub = y_pred[:, num_mdn_param:-1]
+        y_true = tf.reshape(y_true, [-1, output_dim], name='reshape_ytrue')
+        # Split the inputs into paramaters
+        out_mu, out_sigma, out_pi = tf.split(a_pred, num_or_size_splits=[num_mixes * output_dim,
+                                                                         num_mixes * output_dim,
+                                                                         num_mixes],
+                                             axis=-1, name='mdn_coef_split')
+        to_goal = tf.math.scalar_mul(beta_pred, sub)
+        # Construct the mixture models
+        cat = tfd.Categorical(logits=out_pi)
+        component_splits = [output_dim] * num_mixes
+        mus = tf.split(out_mu, num_or_size_splits=component_splits, axis=1)
+        sigs = tf.split(out_sigma, num_or_size_splits=component_splits, axis=1)
+        coll = [tfd.MultivariateNormalDiag(loc=loc, scale_diag=scale) for loc, scale
+                in zip(mus, sigs)]
+        mixture = tfd.Mixture(cat=cat, components=coll)
+        samp = mixture.sample()
+        mse = tf.reduce_mean(tf.square(samp + to_goal - y_true), axis=-1)
         # Todo: temperature adjustment for sampling functon.
         return mse
 
@@ -232,4 +365,39 @@ def sample_from_output(params, output_dim, num_mixes, temp=1.0, sigma_temp=1.0):
     sig_vector = sigs[m*output_dim:(m+1)*output_dim] * sigma_temp  # adjust for temperature
     cov_matrix = np.identity(output_dim) * sig_vector
     sample = np.random.multivariate_normal(mus_vector, cov_matrix, 1)
-    return sample
+    return sample[0]
+
+
+def sample_from_submdn_output(params, output_dim, num_mixes, temp=1.0, sigma_temp=1.0):
+    """Sample from an MDN output with temperature adjustment.
+    This calculation is done outside of the Keras model using
+    Numpy.
+
+    Arguments:
+    params -- the parameters of the mixture model
+    output_dim -- the dimension of the normal models in the mixture model
+    num_mixes -- the number of mixtures represented
+
+    Keyword arguments:
+    temp -- the temperature for sampling between mixture components (default 1.0)
+    sigma_temp -- the temperature for sampling from the normal distribution (default 1.0)
+
+    Returns:
+    One sample from the the mixture model.
+    """
+    num_mdn_param = (2 * num_mixes * output_dim) + num_mixes
+    a_param = params[:][:num_mdn_param]
+    beta = params[0][-1]
+    #print(beta)
+    to_goal = params[0][num_mdn_param:-1]
+    mus, sigs, pi_logits = split_mixture_params(a_param, output_dim, num_mixes)
+    pis = softmax(pi_logits, t=temp)
+    m = sample_from_categorical(pis)
+    # Alternative way to sample from categorical:
+    # m = np.random.choice(range(len(pis)), p=pis)
+    mus_vector = mus[m * output_dim:(m + 1) * output_dim]
+    sig_vector = sigs[m * output_dim:(m + 1) * output_dim] * sigma_temp  # adjust for temperature
+    cov_matrix = np.identity(output_dim) * sig_vector
+    sample = np.random.multivariate_normal(mus_vector, cov_matrix, 1)
+    action = sample[0] + beta * to_goal
+    return action

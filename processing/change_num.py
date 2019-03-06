@@ -4,12 +4,12 @@ import numpy as np
 """
     REMEMBER TO CHECK IF THE DATAPATH IS WHAT YOU EXPECT!!!!!!!!!!
 """
-datapath = '/home/ubuntu/vdp/4'
+datapath = '/home/ubuntu/vrep_path_dataset/7'
 
 
 def change_name(datapath):
     dirlist = os.listdir(datapath)
-    dirlist.sort(key=lambda s: int(s))
+    dirlist.sort(key=lambda s: int(s[1:]))
     if 'list0.pkl' in dirlist:
         raise RuntimeError('not the new dataset!')
     s = 0
@@ -38,7 +38,7 @@ def separate_train_test2(datapath, listpkl, listpkl0=None):
                     for i in range(len(data['actions'])):
                         id_list.append(d + '-' + str(i))
     id_size = len(id_list)
-    train_size = int(0.8 * id_size)
+    train_size = int(0.75 * id_size)
     #np.random.shuffle(id_list)
     train_list = id_list[:train_size]
     vali_list = id_list[train_size:]
@@ -51,5 +51,5 @@ def separate_train_test2(datapath, listpkl, listpkl0=None):
         pickle.dump({'train': train_list, 'test': vali_list}, f1)
 
 
-change_name(datapath)
+#change_name(datapath)
 separate_train_test2(datapath, 'list0.pkl')

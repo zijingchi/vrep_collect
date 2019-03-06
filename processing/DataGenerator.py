@@ -2,7 +2,7 @@ import numpy as np
 import keras
 # import os
 from processing.readDataFromFile import DataFromIndex
-from processing.angle_dis import obs_pt2
+from processing.angle_dis import obs_pt2, cal_avo_dir
 
 
 class CustomDataGenWthImg(keras.utils.Sequence):
@@ -58,7 +58,7 @@ class CustomDataGenWthTarCfg(keras.utils.Sequence):
         self.batch_size = batch_size
         self.data_size = data_size
         self.datapath = datapath
-        self.datafromindex = DataFromIndex(datapath, rad2deg=True, load_img=False)
+        self.datafromindex = DataFromIndex(datapath, rad2deg=False, load_img=False)
         self.list_IDs = list_IDs
         self.indexes = np.arange(len(self.list_IDs))
         self.shuffle = shuffle
@@ -83,19 +83,22 @@ class CustomDataGenWthTarCfg(keras.utils.Sequence):
             np.random.shuffle(self.indexes)
 
     def __data_generation(self, list_IDs_temp):
-        configs = np.empty((self.batch_size, 5), dtype=float)
-        actions = np.empty((self.batch_size, 5), dtype=float)
-        tar_pos_config = np.empty((self.batch_size, 5), dtype=float)
-        obstacle = np.empty((self.batch_size, 8, 3), dtype=float)
-        #obstacle_pos = np.empty((self.batch_size, 3), dtype=float)
-        #obstacle_ori = np.empty((self.batch_size, 3), dtype=float)
+        dof = self.data_size
+        configs = np.empty((self.batch_size, dof), dtype=float)
+        actions = np.empty((self.batch_size, dof), dtype=float)
+        tar_pos_config = np.empty((self.batch_size, dof), dtype=float)
+        #obstacle = np.empty((self.batch_size, 8, 3), dtype=float)
+        obstacle_pos = np.empty((self.batch_size, 3), dtype=float)
+        obstacle_ori = np.empty((self.batch_size, 3), dtype=float)
 
         for i, ID in enumerate(list_IDs_temp):
             obs, act = self.datafromindex.read_per_index(ID)
-            configs[i,] = obs['config']
-            tar_pos_config[i,] = obs['tar_pos']
-            obstacle[i,] = obs_pt2(obs['obstacle_pos'], obs['obstacle_ori'])
-            #obstacle_ori[i,] = obs['obstacle_ori']
-            actions[i,] = act
 
-        return [configs, tar_pos_config, obstacle], actions
+            configs[i,] = obs['config'][:dof]
+            tar_pos_config[i,] = obs['tar_pos'][:dof]
+            obstacle_pos[i,] = obs['obstacle_pos']
+            obstacle_ori[i,] = obs['obstacle_ori']
+            avo = cal_avo_dir(act[:dof], obs['tar_pos'][:dof], obs['config'][:dof], 0.11)
+            actions[i,] = np.rad2deg(avo[:dof])
+
+        return [configs, tar_pos_config, obstacle_pos, obstacle_ori], actions

@@ -37,7 +37,7 @@ class UR5WithCameraSample(vrep_env.VrepEnv):
         #	'UR5_link4_visible','UR5_link5_visible','UR6_link1_visible','UR5_link7_visible']
 
         # Getting object handles
-        self.obstable = self.get_object_handle('Obstacle')
+        self.obstable = self.get_object_handle('Table')
         # Meta
         self.camera1 = self.get_object_handle('camera1')
         self.zfar1 = self.get_obj_float_parameter(self.camera1,
@@ -47,10 +47,9 @@ class UR5WithCameraSample(vrep_env.VrepEnv):
         self.camera2 = self.get_object_handle('camera2')
         self.goal_viz = self.get_object_handle('Cuboid')
         self.tip = self.get_object_handle('tip')
-        self.init_joint_pos = [0, -pi / 12, -3 * pi / 4, 0, pi / 2]
-        init_w = [0.7, 0.1, 0.2, 0.3, 0.3]
-        for i in range(len(self.init_joint_pos)-1):
-            self.init_joint_pos[i] = self.init_joint_pos[i] + init_w[i] * np.random.randn()
+        self.target = self.get_object_handle('target')
+        self.init_joint_pos = [-pi/4, -pi / 12, -12 * pi / 12, 0, 0]
+
         h = 256
         w = 256
         c = 3
@@ -121,146 +120,110 @@ class UR5WithCameraSample(vrep_env.VrepEnv):
             self.obj_set_joint_position(j, a)
 
     def set_obs_pos(self):
-        self.set_joints(self.target_joint_pos)
-
-        tip_pos = self.obj_get_position(self.tip)
-        tip_ori = self.obj_get_orientation(self.tip)
-        self.obj_set_position(self.goal_viz, tip_pos)
-        self.obj_set_orientation(self.goal_viz, tip_ori)
-        # obstacle_pos = tip_pos + 0.2*(np.random.rand(3) + np.array([-3.3, 1.1, -0.3]))
-        self.obstacle_pos = 0.8*np.array(tip_pos) + np.array([0.1*np.random.randn(),
-                                                              0.1+0.1*(0.5-np.random.rand()),
-                                                              0.15+0.05*np.random.rand()])
-        #self.obstacle_pos[2] = 0.35 + 0.2*np.random.rand()
-        self.obstacle_pos = np.array(self.obstacle_pos)
-        self.obj_set_position(self.obstable, self.obstacle_pos)
-        self.obstacle_ori = 0.05 * np.random.rand(3)
-        self.obstacle_ori[2] = self.obstacle_ori[2] + pi/2
-        self.obj_set_orientation(self.obstable, self.obstacle_ori)
-        emptyBuff = bytearray()
-        colcheck1 = self._checkInitCollision(self.cID, emptyBuff)
-        self.set_joints(self.init_joint_pos)
-        colcheck2 = self._checkInitCollision(self.cID, emptyBuff)
-        if ((colcheck1 == 0) & (colcheck2 == 0)):
-            return 1
-        else:
-            return 0
-
-    def set_obs_pos2(self):
-        self.set_joints(self.init_joint_pos)
-        tip_pos = self.obj_get_position(self.tip)
-        alpha = np.random.rand()
-        self.obstacle_pos = alpha * np.array(tip_pos) + (1 - alpha) * tipcoor(self.target_joint_pos.tolist() + [0])
-        self.obstacle_pos[0] = self.obstacle_pos[0] + 0.15 * np.random.randn()
-        self.obstacle_pos[1] = self.obstacle_pos[1] + 0.15 * np.random.randn()
-        self.obstacle_pos[2] = self.obstacle_pos[2] + 0.3 * (np.random.rand() + 0.1)
-        self.obj_set_position(self.obstable, self.obstacle_pos)
-        self.obstacle_ori = 0.1 * np.random.rand(3)
-        self.obstacle_ori[2] = self.obstacle_ori[2] + pi / 2
-        self.obj_set_orientation(self.obstable, self.obstacle_ori)
-        emptyBuff = bytearray()
-        colcheck1 = self._checkInitCollision(self.cID, emptyBuff)
-
-        self.set_joints(self.target_joint_pos)
-        tip_pos = self.obj_get_position(self.tip)
-        tip_ori = self.obj_get_orientation(self.tip)
-        tip_obs_col = (tip_pos[2] < self.obstacle_pos[2] + 0.15) & (tip_pos[1] <
-                                                                    self.obstacle_pos[1] + 0.04) & (
-                                  tip_pos[1] > self.obstacle_pos[1] - 0.04) & (tip_pos[0] <
-                                                                               self.obstacle_pos[0] + 0.27) & (
-                                  tip_pos[0] > self.obstacle_pos[0] - 0.27)
-        self.obj_set_position(self.goal_viz, tip_pos)
-        self.obj_set_orientation(self.goal_viz, tip_ori)
-        colcheck2 = self._checkInitCollision(self.cID, emptyBuff)
-        if (colcheck1 == 0) & (colcheck2 == 0) & (not tip_obs_col):
-            return 1
-        else:
-            return 0
-
-    def set_obs_pos3(self, obs_pos, obs_ori):
-        self.obj_set_position(self.obstable, obs_pos)
-        self.obj_set_orientation(self.obstable, obs_ori)
-        self.set_joints(self.init_joint_pos)
-        emptyBuff = bytearray()
-        colcheck1 = self._checkInitCollision(self.cID, emptyBuff)
-        self.set_joints(self.target_joint_pos)
-        tip_pos = self.obj_get_position(self.tip)
-        tip_ori = self.obj_get_orientation(self.tip)
-        self.obj_set_position(self.goal_viz, tip_pos)
-        self.obj_set_orientation(self.goal_viz, tip_ori)
-        colcheck2 = self._checkInitCollision(self.cID, emptyBuff)
-        if ((colcheck1 == 0) & (colcheck2 == 0)):
-            return 1
-        else:
-            return 0
+        pass
 
     def step(self, t):
-        self._make_observation()
-        next_state = self.path[t+1]
+        self._make_observation()  # make an observation
+
+        next_state = self.path[t + 1]
         action = next_state - self.observation['joint']
-        #print(np.linalg.norm(action))
-        #self.set_joints(next_state)
         self._make_action(action)
         self.step_simulation()
 
         return self.observation, action
+
+    def gen_pos(self):
+        x = -0.1 + 0.6*(0.5-np.random.rand())
+        y = -0.7 + 0.6*(0.5-np.random.rand())
+        z = 0.505
+        return np.array([x, y, z])
+
+    def gen_ori(self):
+        ori = np.array([pi, 0, pi/2])
+        mtc = [0.08, 0.08, 0.1]
+        for i in range(3):
+            ori[i] = ori[i] + mtc[i]
+        return ori
+
+    def chop_angle(self, config):
+        for i in range(len(config)):
+            theta = config[i]
+            if -pi < (theta + 2*pi) < pi:
+                config[i] = theta + 2*pi
+            elif -pi < (theta - 2*pi) < pi:
+                config[i] = theta - 2*pi
+        return config
 
     def reset(self):
         if self.sim_running:
             self.stop_simulation()
         while self.sim_running:
             self.stop_simulation()
-        self.target_joint_pos = [0.2 * np.random.randn(), 0.1 * np.random.randn() - pi / 3,
-                                0.1 * np.random.randn() - pi / 3, 0.3 * np.random.randn(),
-                                0.2 * np.random.randn() + pi / 2]
-        self.target_joint_pos = np.array(self.target_joint_pos)
+
+        init_w = [0.4, 0.4, 0.4, 0.4, 0.4]
+
+        for i in range(len(self.init_joint_pos)):
+            self.init_joint_pos[i] = self.init_joint_pos[i] + init_w[i] * np.random.randn()
+        self.target_pos = self.gen_pos()
+        self.target_ori = self.gen_ori()
+        emptybuff = bytearray()
         self.start_simulation()
-        found = False
-
-        colcheck = self.set_obs_pos2()
-        self.inits = {'target_joint_pos': np.array(self.target_joint_pos),
-                      'obstacle_pos': np.array(self.obstacle_pos),
-                      'obstacle_ori': self.obstacle_ori}
-        if colcheck == 1:
+        fres = -2
+        retInts, goalState, retStrings, retBuffer = self.call_childscript_function('Dummy', 'calGoalState', [[],
+                                                    np.concatenate([self.target_pos, self.target_ori]).tolist(),
+                                                    [], emptybuff])
+        if retInts[0] == 1 and len(goalState) > 0:
+            goalState = self.chop_angle(goalState)
+            print(np.rad2deg(self.init_joint_pos))
+            print(np.rad2deg(goalState[:5]))
+            self.target_joint = goalState
+            self.set_joints(goalState)
+            self.obj_set_position(self.goal_viz, self.target_pos)
+            self.obj_set_orientation(self.goal_viz, self.target_ori)
+            colcheck1 = self._checkInitCollision(self.cID, emptybuff)
             self.set_joints(self.init_joint_pos)
+            colcheck2 = self._checkInitCollision(self.cID, emptybuff)
+
+            fres = -1 # -1 indicates collision in initial or target state
+            if colcheck1 == 0 and colcheck2 == 0:
+                self.step_simulation()
+                inFloats = self.init_joint_pos + self.target_joint[:-1]
+                n_path, path, res = self._calPathThroughVrep(self.cID, 400, inFloats, emptybuff)
+                if (res == 0) and (n_path != 0):
+                    np_path = np.array(path)
+                    re_path = np_path.reshape((n_path, 5))
+                    # re_path = re_path[:, 0:5]
+                    thresh = 0.1
+                    c0 = np.array(self.init_joint_pos)
+                    final_path = [c0]
+                    for c in re_path:
+                        if config_dis(c, c0) > thresh:
+                            final_path.append(c)
+                            c0 = c
+                    self.n_path = len(final_path)
+                    self.path = final_path
+                    fres = 0
+                elif res == 3:
+                    fres = 1
+                    print('timeout')
+                    time.sleep(5)
+                else:
+                    fres = 2
+
+            self.inits = {'target_joint_pos': np.array(self.target_joint),
+                          'target_pose': self.target_pos,
+                          'target_ori': self.target_ori}
             self.step_simulation()
-            self.current_state = np.array(self.init_joint_pos).astype('float32')
-            clientID = self.cID
-            inFloats = self.init_joint_pos + self.target_joint_pos
-            emptyBuff = bytearray()
-            n_path, path, res = self._calPathThroughVrep(clientID, 400, inFloats, emptyBuff)
-            if (res == 0) & (n_path != 0):
-                np_path = np.array(path)
-                re_path = np_path.reshape((n_path, 5))
-                # re_path = re_path[:, 0:5]
-                thresh = 0.1
-                c0 = np.array(self.init_joint_pos)
-                final_path = [c0]
-                for c in re_path:
-                    if config_dis(c, c0) > thresh:
-                        final_path.append(c)
-                        c0 = c
-                #if c0.any() != np.array(self.target_joint_pos).any():
-                #    final_path.append(np.array(self.target_joint_pos))
-                self.n_path = len(final_path)
-                self.path = final_path
-                # print('obstacle_pos:', self.obstacle_pos)
-                found = True
-            if res == 3:
-                print('timeout')
-                time.sleep(5)
-
-        return found
-
-    def render(self, mode='human', close=False):
-        pass
+        else:
+            print('calGoalState fail')
+        return fres
 
 
 def main(args):
     path0 = os.getcwd()
     hi = path0.find('home') + 5
     homepath = path0[:path0.find('/', hi)]
-    workpath = homepath + '/vrep_path_dataset/5/'
+    workpath = homepath + '/vrep_path_dataset/7/'
     if not os.path.exists(workpath):
         os.mkdir(workpath)
     dirlist = os.listdir(workpath)
@@ -272,10 +235,11 @@ def main(args):
     os.chdir(workpath)
     env = UR5WithCameraSample()
     i = maxdir + 1
-    while i < 150:
+    while i < maxdir + 200:
         print('iter:', i)
-        found = env.reset()
-        if found:
+        fres = env.reset()
+        if fres == 0:
+            print('path found')
             os.mkdir(str(i))
             os.mkdir(str(i) + "/img1")
             os.mkdir(str(i) + "/img2")
@@ -293,8 +257,9 @@ def main(args):
             with open(workpath + str(i) + '/data.pkl', 'wb') as f:
                 pickle.dump(data, f)
             i = i + 1
-        else:
-            print("path not found")
+        elif fres == -1:
+            print("collision at init or target")
+
     # print("Episode finished after {} timesteps.\tTotal reward: {}".format(t+1,total_reward))
     env.close()
     return 0

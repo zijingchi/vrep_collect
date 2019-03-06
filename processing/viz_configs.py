@@ -61,12 +61,12 @@ def main():
     path0 = os.getcwd()
     hi = path0.find('home') + 5
     homepath = path0[:path0.find('/', hi)]
-    workpath = homepath + '/vdp/4_2/'
+    workpath = homepath + '/vdp/test/'
     obs_poses = read_obs(workpath)
     mean, var = np.mean(obs_poses, 0), np.var(obs_poses, 0)
-    pklfile1 = os.path.join(workpath, '82/data.pkl')
+    pklfile1 = os.path.join(workpath, '30/data.pkl')
     actions, configs = read_configs(pklfile1, True)
-    plot_configs(actions, 3)
+    #plot_configs(actions, 3)
     print(statics_config(actions))
 
 

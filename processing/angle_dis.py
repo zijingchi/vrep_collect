@@ -1,6 +1,6 @@
 import numpy as np
 
-metrics = [1.2, 2, 1.6, 0.4, 0.3]
+metrics = [1.2, 1.2, 1.0, 0.2, 0.2]
 
 
 def config_dis(config1, config2):
@@ -64,3 +64,6 @@ def obs_pt2(pos, ori):
     #PafterT = np.reshape(PafterT, (1, -1))
     return PafterT
 
+
+def cal_avo_dir(action, tar, cur, thresh):
+    return action - thresh*(tar - cur)/np.linalg.norm(tar - cur)

@@ -4,7 +4,7 @@ import cv2
 import time
 import pickle
 from train.train_mdn1 import model_with_latentspace_mdn
-from processing.angle_dis import obs_pt
+from processing.angle_dis import obs_pt2, config_dis
 from vrep_data.collect_from_vrep1 import UR5WithCameraSample
 from processing.fknodes import tipcoor
 from train.mdn import *
@@ -21,7 +21,8 @@ class MDN_policy(UR5WithCameraSample):
             server_addr='127.0.0.1',
             server_port=19997,
             scene_path=None,
-            modelweights=None
+            modelweights=None,
+            askvrep=True
     ):
 
         UR5WithCameraSample.__init__(
@@ -31,9 +32,9 @@ class MDN_policy(UR5WithCameraSample):
             scene_path,
         )
 
-        self.model = model_with_latentspace_mdn(5)
+        self.model = model_with_latentspace_mdn(3)
         self.model.load_weights(modelweights)
-
+        self.askvrep = askvrep
         print('UR5VrepEnv: initialized')
 
     def _cal_depth(self, chandle, zfar, znear):
@@ -50,48 +51,74 @@ class MDN_policy(UR5WithCameraSample):
         self._make_observation()  # make an observation
         # predict the action from the model
         config = self.observation['joint']
-        x1 = self._transpose(config)
-        x2 = self._transpose(self.target_joint_pos)
-        x3 = self._transpose(obs_pt(self.obstacle_pos, self.obstacle_ori))
-        param = self.model.predict([x1, x2, x3])
-        action = sample_from_output(param, 5, 10)
-        # action = action[0]
-        action = np.deg2rad(action[0])
+        thresh = 0.1
+        x1 = self._transpose(config[:3])
+        x2 = self._transpose(self.target_joint_pos[:3])
+        #x3 = obs_pt2(self.obstacle_pos, self.obstacle_ori)
+        x3 = self._transpose(self.obstacle_pos)
+        x4 = self._transpose(self.obstacle_ori)
+        #x3.shape = (1, 8, 3)
+        param = self.model.predict([x1, x2, x3, x4])
+        action = sample_from_output(param, 3, 15, 1, 0.5)
+        action = np.concatenate((action, np.zeros(2)))
+        action = np.deg2rad(action)
+        action = 1.2*action + thresh * (self.target_joint_pos - config) / np.linalg.norm(self.target_joint_pos[:3] - config[:3])
+        #print(action)
         self._make_action(action)  # make the action
-        emptyBuff = bytearray()
-        # ask the expert to give the right action if exists (here the expert is the ompl algorithm used in v-rep
-        """inFloats = config.tolist() + self.target_joint_pos.tolist()
-        minConfigs = int(60 * np.linalg.norm(self.target_joint_pos - config) / 1.35)      
-        n_path, path, res = self._calPathThroughVrep(self.cID, minConfigs, inFloats, emptyBuff)
-        thresh = 0.06
-        expert_action = -1
-        if (res == 0) & (n_path != 0):
-            np_path = np.array(path)
-            re_path = np_path.reshape((n_path, 6))
-            for p in re_path:
-                n = np.linalg.norm(p - config)
-                if n > thresh:
-                    expert_action = p - config
-                    break
-        if res == 3:
-            time.sleep(3)"""
-        colcheck = self._checkInitCollision(self.cID, emptyBuff)
-        amp_between = np.linalg.norm(self.target_joint_pos - config)
-        check = (amp_between < 0.2) or (colcheck == 1)
         self.step_simulation()
 
-        return action, check
+        emptyBuff = bytearray()
+        colcheck = self._checkInitCollision(self.cID, emptyBuff)
+        amp_between = config_dis(self.target_joint_pos, config)
+        if self.askvrep:
+            inFloats = config.tolist() + self.target_joint_pos.tolist()
+            minConfigs = int(300 * np.linalg.norm(self.target_joint_pos - config))
+
+            n_path, path, res = self._calPathThroughVrep(self.cID, minConfigs, inFloats, emptyBuff)
+            expert_action = []
+            if (res == 0) & (n_path != 0):
+                np_path = np.array(path)
+                re_path = np_path.reshape((n_path, 5))
+                for p in re_path:
+                    n = config_dis(p, config)
+                    if n > thresh:
+                        expert_action = p - config
+                        break
+            elif res == 3:
+                print('timeout')
+                time.sleep(6)
+            else:
+                print('no')
+
+            check = (amp_between < thresh) or (colcheck == 1) or (expert_action == [])
+            if check:
+                if amp_between < thresh:
+                    print('reaching')
+                if colcheck == 1:
+                    print('colliding')
+                if expert_action == []:
+                    print('expert action not found')
+            # else:
+            #    self._make_action(expert_action)
+
+            self.step_simulation()
+
+            return action, expert_action, check
+        else:
+            check = (amp_between < thresh) or (colcheck == 1)
+            return action, None, check
 
     def set_obs_pos2(self):
         self.set_joints(self.init_joint_pos)
         tip_pos = self.obj_get_position(self.tip)
         alpha = np.random.rand()
-        self.obstacle_pos = alpha*np.array(tip_pos) + (1-alpha)*tipcoor(np.append(self.target_joint_pos, np.zeros(1)))
-        self.obstacle_pos[0] = self.obstacle_pos[0] + 0.05*np.random.randn()
-        self.obstacle_pos[1] = self.obstacle_pos[1] + 0.05*np.random.randn()
-        self.obstacle_pos[2] = self.obstacle_pos[2] + 0.15*(np.random.rand()+0.8)
+        self.obstacle_pos = alpha * np.array(tip_pos) + (1 - alpha) * tipcoor(self.target_joint_pos.tolist() + [0])
+        self.obstacle_pos[0] = self.obstacle_pos[0] + 0.15 * np.random.randn()
+        self.obstacle_pos[1] = self.obstacle_pos[1] + 0.15 * np.random.randn()
+        self.obstacle_pos[2] = self.obstacle_pos[2] + 0.4 * (np.random.rand() + 0.1)
         self.obj_set_position(self.obstable, self.obstacle_pos)
         self.obstacle_ori = 0.1 * np.random.rand(3)
+        self.obstacle_ori[2] = self.obstacle_ori[2] + pi / 2
         self.obj_set_orientation(self.obstable, self.obstacle_ori)
         emptyBuff = bytearray()
         colcheck1 = self._checkInitCollision(self.cID, emptyBuff)
@@ -99,10 +126,15 @@ class MDN_policy(UR5WithCameraSample):
         self.set_joints(self.target_joint_pos)
         tip_pos = self.obj_get_position(self.tip)
         tip_ori = self.obj_get_orientation(self.tip)
+        tip_obs_col = (tip_pos[2] < self.obstacle_pos[2] + 0.15) & (tip_pos[1] <
+                                                                    self.obstacle_pos[1] + 0.04) & (
+                                  tip_pos[1] > self.obstacle_pos[1] - 0.04) & (tip_pos[0] <
+                                                                               self.obstacle_pos[0] + 0.27) & (
+                                  tip_pos[0] > self.obstacle_pos[0] - 0.27)
         self.obj_set_position(self.goal_viz, tip_pos)
         self.obj_set_orientation(self.goal_viz, tip_ori)
         colcheck2 = self._checkInitCollision(self.cID, emptyBuff)
-        if ((colcheck1 == 0) & (colcheck2 == 0)):
+        if (colcheck1 == 0) & (colcheck2 == 0) & (not tip_obs_col):
             return 1
         else:
             return 0
@@ -113,19 +145,21 @@ class MDN_policy(UR5WithCameraSample):
         while self.sim_running:
             self.stop_simulation()
 
-        self.target_joint_pos = np.array([0.2 * np.random.randn(), 0.1 * np.random.randn() - pi / 4,
+        self.target_joint_pos = np.array([0.2 * np.random.randn(), 0.1 * np.random.randn() - pi / 3,
                                           0.2 * np.random.randn() - pi / 3, 0.3 * np.random.randn(),
                                           0.2 * np.random.randn() + pi / 2])
 
         self.start_simulation()
         colcheck = self.set_obs_pos2()
+
         self.inits = {'target_joint_pos': self.target_joint_pos,
                       'obstacle_pos': np.array(self.obstacle_pos),
                       'obstacle_ori': self.obstacle_ori}
-        self.set_joints(self.init_joint_pos)
         self.step_simulation()
         if colcheck == 1:
             self.current_state = self.init_joint_pos
+            self.set_joints(self.init_joint_pos)
+            self.step_simulation()
 
         return colcheck
 
@@ -140,9 +174,9 @@ def main(args):
     path0 = os.getcwd()
     hi = path0.find('home') + 5
     homepath = path0[:path0.find('/', hi)]
-    workpath = homepath + '/vdp/mdn1/'
+    workpath = homepath + '/vdp/mdn3/'
     path1 = path0[:path0.rfind('/')]
-    model_weights = os.path.join(path1, 'train/h5files/5dof_latent_mdn_weights4.h5')
+    model_path = os.path.join(path1, 'train/h5files/3mid_sub_mdn_weights10.h5')
     if not os.path.exists(workpath):
         os.mkdir(workpath)
     dirlist = os.listdir(workpath)
@@ -152,8 +186,10 @@ def main(args):
     else:
         maxdir = max(numlist)
     os.chdir(workpath)
-    env = MDN_policy(modelweights=model_weights)
-    for i in range(maxdir + 1, maxdir + 20):
+    askvrep = False
+    env = MDN_policy(modelweights=model_path,
+                     askvrep=askvrep)
+    for i in range(maxdir + 1, maxdir + 25):
         print('iter:', i)
         collision = env.reset()
         if collision:
@@ -165,21 +201,25 @@ def main(args):
             acs = []
             exp_acs = []
             for t in range(60):
-                action, check = env.step(t)
+                action, expert_action, check = env.step(t)
                 if check:
                     break
                 obs.append(env.observation['joint'])
                 cv2.imwrite(str(i) + '/img1/' + str(t) + '.jpg', env.observation['image1'])
                 cv2.imwrite(str(i) + '/img2/' + str(t) + '.jpg', env.observation['image2'])
                 acs.append(action)
-                #exp_acs.append(expert_action)
-                env.current_state = env.observation
-            data = {'inits': env.inits, 'observations': obs, 'actions': acs}
+                if askvrep:
+                    exp_acs.append(expert_action)
+                env.current_state = env.observation['joint']
+            if askvrep:
+                data = {'inits': env.inits, 'observations': obs, 'actions': exp_acs, 'policy': acs}
+            else:
+                data = {'inits': env.inits, 'observations': obs, 'actions': acs}
             if len(obs) != 0:
                 with open(str(i) + '/data.pkl', 'wb') as f:
                     pickle.dump(data, f)
         else:
-            print("collision at target pose")
+            print("collision at initial or target pose")
     # print("Episode finished after {} timesteps.\tTotal reward: {}".format(t+1,total_reward))
     env.close()
     return 0

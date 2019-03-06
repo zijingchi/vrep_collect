@@ -15,7 +15,7 @@ from processing.DataGenerator import CustomDataGenWthTarCfg
 from processing.angle_dis import metrics
 from train.fknodes import fktensor
 
-learning_rate = 8e-3         # 学习率
+learning_rate = 2e-3         # 学习率
 # learning_rate = 0.1
 lr_decay = 1e-3
 l1_regu = 1e-3
@@ -569,7 +569,7 @@ def separate_train_test2(datapath, listpkl, listpkl0=None):
 
 def train_with_generator(datapath, batch_size, epochs):
     model = model_with_1dconv(5)
-    #model.load_weights('./h5files/model_big_weights3_1.h5')
+    model.load_weights('./h5files/model_conv1d_weights3.h5')
     model.compile(loss=weighted_logcosh,
                   optimizer=optimizers.Adam(lr=learning_rate, beta_1=0.9, beta_2=0.999, decay=lr_decay),
                   metrics=['mse'])
@@ -589,9 +589,9 @@ def train_with_generator(datapath, batch_size, epochs):
                                       list_IDs=vali_list,
                                       data_size=50,
                                       batch_size=batch_size)
-    checkpoint = ModelCheckpoint(filepath='./h5files/model_conv1d_weights2.h5', monitor='val_mean_squared_error',
+    checkpoint = ModelCheckpoint(filepath='./h5files/model_conv1d_weights3.h5', monitor='val_mean_squared_error',
                                  save_best_only=True, save_weights_only=True, mode='min')
-    tensorboard = TensorBoard(log_dir='./tensorboard_logs/model_big3_2/log')
+    tensorboard = TensorBoard(log_dir='./tensorboard_logs/model_big3_4_3/log')
     history = model.fit_generator(generator=train_gen,
                                   epochs=epochs,
                                   validation_data=vali_gen,
@@ -600,9 +600,9 @@ def train_with_generator(datapath, batch_size, epochs):
                                   workers=2)
     # K.clear_session()
     #model.save('./h5files/model10_5.h5')
-    model.save_weights('./h5files/model_big_weights3_2.h5')
+    model.save_weights('./h5files/model_big_weights3_5.h5')
 
 
 if __name__ == '__main__':
-    datapath = '/home/ubuntu/vdp/4/'
+    datapath = '/home/ubuntu/vdp/4_3/'
     train_with_generator(datapath, 72, 300)
