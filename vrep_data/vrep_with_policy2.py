@@ -43,9 +43,9 @@ class MDN_policy(UR5WithCameraSample):
         return depmat
 
     def _transpose(self, nparray):
-        m = np.mat(nparray).T
-        m.shape = (1, nparray.size)
-        return m
+        #m = np.mat(nparray).T
+        nparray.shape = (1, nparray.size)
+        return nparray
 
     def step(self, t):
         self._make_observation()  # make an observation
@@ -59,10 +59,10 @@ class MDN_policy(UR5WithCameraSample):
         x4 = self._transpose(self.obstacle_ori)
         #x3.shape = (1, 8, 3)
         param = self.model.predict([x1, x2, x3, x4])
-        action = sample_from_output(param, 3, 15, 1, 0.5)
+        action = sample_from_output(param, 3, 15, 1, 0.2)
         action = np.concatenate((action, np.zeros(2)))
         action = np.deg2rad(action)
-        action = 1.2*action + thresh * (self.target_joint_pos - config) / np.linalg.norm(self.target_joint_pos[:3] - config[:3])
+        action = 1.4*action + thresh * (self.target_joint_pos - config) / np.linalg.norm(self.target_joint_pos[:3] - config[:3])
         #print(action)
         self._make_action(action)  # make the action
         self.step_simulation()
@@ -70,6 +70,12 @@ class MDN_policy(UR5WithCameraSample):
         emptyBuff = bytearray()
         colcheck = self._checkInitCollision(self.cID, emptyBuff)
         amp_between = config_dis(self.target_joint_pos, config)
+        check1 = amp_between < thresh
+        check2 = colcheck == 1
+        if check1:
+            print('reaching')
+        if check2:
+            print('colliding')
         if self.askvrep:
             inFloats = config.tolist() + self.target_joint_pos.tolist()
             minConfigs = int(300 * np.linalg.norm(self.target_joint_pos - config))
@@ -89,18 +95,13 @@ class MDN_policy(UR5WithCameraSample):
                 time.sleep(6)
             else:
                 print('no')
+            check3 = len(expert_action) == 0
+            check = check1 or check2 or check3
 
-            check = (amp_between < thresh) or (colcheck == 1) or (expert_action == [])
-            if check:
-                if amp_between < thresh:
-                    print('reaching')
-                if colcheck == 1:
-                    print('colliding')
-                if expert_action == []:
-                    print('expert action not found')
+            if check3:
+                print('expert action not found')
             # else:
             #    self._make_action(expert_action)
-
             self.step_simulation()
 
             return action, expert_action, check
@@ -113,9 +114,9 @@ class MDN_policy(UR5WithCameraSample):
         tip_pos = self.obj_get_position(self.tip)
         alpha = np.random.rand()
         self.obstacle_pos = alpha * np.array(tip_pos) + (1 - alpha) * tipcoor(self.target_joint_pos.tolist() + [0])
-        self.obstacle_pos[0] = self.obstacle_pos[0] + 0.15 * np.random.randn()
-        self.obstacle_pos[1] = self.obstacle_pos[1] + 0.15 * np.random.randn()
-        self.obstacle_pos[2] = self.obstacle_pos[2] + 0.4 * (np.random.rand() + 0.1)
+        self.obstacle_pos[0] = self.obstacle_pos[0] + 0.05 * np.random.randn()
+        self.obstacle_pos[1] = self.obstacle_pos[1] + 0.05 * np.random.randn()
+        self.obstacle_pos[2] = self.obstacle_pos[2] + 0.2 * (np.random.rand() + 0.5)
         self.obj_set_position(self.obstable, self.obstacle_pos)
         self.obstacle_ori = 0.1 * np.random.rand(3)
         self.obstacle_ori[2] = self.obstacle_ori[2] + pi / 2
@@ -174,9 +175,9 @@ def main(args):
     path0 = os.getcwd()
     hi = path0.find('home') + 5
     homepath = path0[:path0.find('/', hi)]
-    workpath = homepath + '/vdp/mdn3/'
+    workpath = homepath + '/vdp/mdn5/'
     path1 = path0[:path0.rfind('/')]
-    model_path = os.path.join(path1, 'train/h5files/3mid_sub_mdn_weights10.h5')
+    model_path = os.path.join(path1, 'train/h5files/3dof_latent_mdn_weights_11.h5')
     if not os.path.exists(workpath):
         os.mkdir(workpath)
     dirlist = os.listdir(workpath)
@@ -189,7 +190,8 @@ def main(args):
     askvrep = False
     env = MDN_policy(modelweights=model_path,
                      askvrep=askvrep)
-    for i in range(maxdir + 1, maxdir + 25):
+    i = maxdir + 1
+    while i < maxdir + 200:
         print('iter:', i)
         collision = env.reset()
         if collision:
@@ -200,7 +202,7 @@ def main(args):
             obs = []
             acs = []
             exp_acs = []
-            for t in range(60):
+            for t in range(80):
                 action, expert_action, check = env.step(t)
                 if check:
                     break
@@ -218,6 +220,7 @@ def main(args):
             if len(obs) != 0:
                 with open(str(i) + '/data.pkl', 'wb') as f:
                     pickle.dump(data, f)
+            i = i + 1
         else:
             print("collision at initial or target pose")
     # print("Episode finished after {} timesteps.\tTotal reward: {}".format(t+1,total_reward))

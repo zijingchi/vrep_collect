@@ -122,7 +122,7 @@ def model_with_config_n_target2(dof):
     beta = Dense(1, kernel_regularizer=regularizers.l1(l1_regu),
                  bias_regularizer=regularizers.l1(l1_regu),
                  activation='relu', name='sub_dense3')(x4)"""
-    #final_output = act1
+    final_output = act1
 
     #final_output = Add(name='add')([act1, x4])
     final_output = Dense(dof, name='final_output')(act1)
@@ -171,11 +171,11 @@ def weighted_logcosh(y_true, y_pred):
 
 
 def train_with_generator(datapath, batch_size, epochs, dof):
-    model = model_with_config_n_target(dof)
-    #h5file = './h5files/model_simple_weights4.h5'
-    #model.load_weights(h5file)
-    model.compile(loss=weighted_logcosh,
-                  optimizer=optimizers.Adam(lr=2e-2, beta_1=0.9, beta_2=0.999, decay=1e-3),
+    model = model_with_config_n_target2(dof)
+    h5file = './h5files/5dof_model5.h5'
+    model.load_weights(h5file)
+    model.compile(loss=losses.logcosh,
+                  optimizer=optimizers.Adam(lr=2e-2, beta_1=0.9, beta_2=0.999, decay=5e-3),
                   metrics=['mse'])
     #plot_model(model, to_file='5dof_model1.jpg', show_shapes=True)
     with open(os.path.join(datapath, 'list0.pkl'), 'rb') as f:
@@ -190,18 +190,18 @@ def train_with_generator(datapath, batch_size, epochs, dof):
                                       list_IDs=vali_list,
                                       data_size=dof,
                                       batch_size=batch_size)
-    checkpoint = ModelCheckpoint(filepath='./h5files/model_simple_weights5.h5', monitor='val_loss',
+    checkpoint = ModelCheckpoint(filepath='./h5files/model_simple_weights5.h5', monitor='val_mean_squared_error',
                                  save_best_only=True, save_weights_only=True, mode='min')
     model.fit_generator(generator=train_gen,
                         epochs=epochs,
                         validation_data=vali_gen,
                         use_multiprocessing=True,
-                        callbacks=[TensorBoard(log_dir='./tensorboard_logs/5dof_model5/log'), checkpoint],
+                        callbacks=[TensorBoard(log_dir='./tensorboard_logs/3dof_model5/log'), checkpoint],
                         workers=2)
-    model.save('./h5files/5dof_model5.h5')
+    model.save('./h5files/3dof_model5.h5')
 
 
 if __name__ == '__main__':
-    datapath = '/home/ubuntu/vrep_path_dataset/7/'
+    datapath = '/home/ubuntu/vdp/4_3/'
     #separate_train_test2(datapath)
-    train_with_generator(datapath, 72, 200, 5)
+    train_with_generator(datapath, 100, 100, 3)

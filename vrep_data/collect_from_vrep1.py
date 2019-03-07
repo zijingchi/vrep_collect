@@ -48,7 +48,7 @@ class UR5WithCameraSample(vrep_env.VrepEnv):
         self.goal_viz = self.get_object_handle('Cuboid')
         self.tip = self.get_object_handle('tip')
         self.init_joint_pos = [0, -pi / 12, -3 * pi / 4, 0, pi / 2]
-        init_w = [0.7, 0.1, 0.2, 0.3, 0.3]
+        init_w = [0.5, 0.2, 0.2, 0.3, 0.3]
         for i in range(len(self.init_joint_pos)-1):
             self.init_joint_pos[i] = self.init_joint_pos[i] + init_w[i] * np.random.randn()
         h = 256
@@ -76,7 +76,7 @@ class UR5WithCameraSample(vrep_env.VrepEnv):
         """send the signal to v-rep and retrieve the path tuple calculated by the v-rep script"""
         maxConfigsForDesiredPose = 10  # we will try to find 10 different states corresponding to the goal pose and order them according to distance from initial state
         maxTrialsForConfigSearch = 300  # a parameter needed for finding appropriate goal states
-        searchCount = 3  # how many times OMPL will run for a given task
+        searchCount = 2  # how many times OMPL will run for a given task
         # minConfigsForPathPlanningPath = 50  # interpolation states for the OMPL path
         minConfigsForIkPath = 100  # interpolation states for the linear approach path
         collisionChecking = 1  # whether collision checking is on or off
@@ -151,8 +151,8 @@ class UR5WithCameraSample(vrep_env.VrepEnv):
         tip_pos = self.obj_get_position(self.tip)
         alpha = np.random.rand()
         self.obstacle_pos = alpha * np.array(tip_pos) + (1 - alpha) * tipcoor(self.target_joint_pos.tolist() + [0])
-        self.obstacle_pos[0] = self.obstacle_pos[0] + 0.15 * np.random.randn()
-        self.obstacle_pos[1] = self.obstacle_pos[1] + 0.15 * np.random.randn()
+        self.obstacle_pos[0] = self.obstacle_pos[0] + 0.05 * np.random.randn()
+        self.obstacle_pos[1] = self.obstacle_pos[1] + 0.05 * np.random.randn()
         self.obstacle_pos[2] = self.obstacle_pos[2] + 0.3 * (np.random.rand() + 0.1)
         self.obj_set_position(self.obstable, self.obstacle_pos)
         self.obstacle_ori = 0.1 * np.random.rand(3)

@@ -62,9 +62,9 @@ def model_with_latentspace_mdn(dof):
 
 def train_with_generator(datapath, batch_size, epochs, dof):
     learning_rate = 1e-3  # 学习率
-    lr_decay = 1e-3
+    lr_decay = 3e-3
     model = model_with_latentspace_mdn(dof)
-    #model.load_weights('./h5files/5dof_latent_mdn_weights8.h5')
+    #model.load_weights('./h5files/3mid_sub_mdn_weights_d2.h5')
     model.compile(loss=get_mixture_loss_func(OUTPUT_DIMS, N_MIXES),
                   optimizer=optimizers.Adam(lr=learning_rate, beta_1=0.9, beta_2=0.999, decay=lr_decay),
                   metrics=[get_mixture_mse_accuracy(OUTPUT_DIMS, N_MIXES)])
@@ -84,21 +84,21 @@ def train_with_generator(datapath, batch_size, epochs, dof):
                                       list_IDs=vali_list,
                                       data_size=dof,
                                       batch_size=batch_size)
-    checkpoint = ModelCheckpoint(filepath='./h5files/3mid_sub_mdn_weights10.h5', monitor='val_mse_func',
+    checkpoint = ModelCheckpoint(filepath='./h5files/3mid_sub_mdn_weights11.h5', monitor='val_mse_func',
                                  save_best_only=True, save_weights_only=True, mode='min')
     history = model.fit_generator(generator=train_gen,
                                   epochs=epochs,
                                   validation_data=vali_gen,
                                   use_multiprocessing=True,
-                                  callbacks=[TensorBoard(log_dir='./tensorboard_logs/3dof_latent_mdn10/log'),
+                                  callbacks=[TensorBoard(log_dir='./tensorboard_logs/3dof_latent_mdn_11/log'),
                                              TerminateOnNaN(),
                                              checkpoint],
                                   workers=2)
     # K.clear_session()
     # model.save('./h5files/5dof_latent_6.h5')
-    model.save_weights('./h5files/3dof_latent_mdn_weights10.h5')
+    model.save_weights('./h5files/3dof_latent_mdn_weights_11.h5')
 
 
 if __name__ == '__main__':
     datapath = '/home/ubuntu/vdp/4_3/'
-    train_with_generator(datapath, 60, 150, OUTPUT_DIMS)
+    train_with_generator(datapath, 100, 150, OUTPUT_DIMS)

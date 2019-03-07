@@ -36,7 +36,7 @@ class UR5DaggerSample(UR5WithCameraSample):
         self.model = None
         self.askvrep=askvrep
         if modelfile:
-            self.model = model_with_config_n_target2(5)
+            self.model = model_with_config_n_target2(3)
             self.model.load_weights(modelfile)
 
         print('UR5DaggerSample: initialized')
@@ -54,16 +54,18 @@ class UR5DaggerSample(UR5WithCameraSample):
         emptyBuff = bytearray()
         thresh = 0.1
         if self.model:
-            x1 = self._transpose(config)
-            x2 = self._transpose(self.target_joint_pos)
+            x1 = self._transpose(config[:3])
+            x2 = self._transpose(self.target_joint_pos[:3])
             x3 = self._transpose(self.obstacle_pos)
             x4 = self._transpose(self.obstacle_ori)
             #x3 = self._transpose(np.concatenate((self.obstacle_pos, self.obstacle_ori)))
             #x3 = obs_pt2(self.obstacle_pos, self.obstacle_ori)
             #x3.shape = (1, 8, 3)
             action = self.model.predict([x1, x2, x3, x4])
-            action = np.deg2rad(action[0])
-            action = 1.5*action + thresh * (self.target_joint_pos - config)/config_dis(self.target_joint_pos, config)
+            action = np.concatenate((action[0], np.zeros(2)))
+            action = np.deg2rad(action)
+            action = 1.5 * action + 1.1 * thresh * (self.target_joint_pos - config) / np.linalg.norm(
+                self.target_joint_pos[:3] - config[:3])
 
             self._make_action(action)   # make the action
             self.step_simulation()
@@ -71,10 +73,14 @@ class UR5DaggerSample(UR5WithCameraSample):
         colcheck = self._checkInitCollision(self.cID, emptyBuff)
         amp_between = config_dis(self.target_joint_pos, config)
         expert_action = []
-        check = (amp_between < thresh) or (colcheck == 1)
-        if amp_between < thresh:
+        check1 = amp_between < thresh
+        check2 = colcheck == 1
+        check = 0
+        if check1:
+            check = 1
             print('reaching')
-        if colcheck == 1:
+        if check2:
+            check = 2
             print('colliding')
 
         if self.askvrep:
@@ -97,8 +103,9 @@ class UR5DaggerSample(UR5WithCameraSample):
             else:
                 print('no')
 
-            check = (amp_between < thresh) or (colcheck == 1) or (expert_action == [])
-            if not expert_action:
+            check3 = len(expert_action) == 0
+            if check3:
+                check = 3
                 print('expert action not found')
             #else:
             #    self._make_action(expert_action)
@@ -130,6 +137,21 @@ class UR5DaggerSample(UR5WithCameraSample):
 
         return colcheck
 
+    def directly_towards(self, n):
+        emptyBuff = bytearray()
+
+        init_jp = np.array(self.init_joint_pos)
+        sub = (self.target_joint_pos - init_jp)/n
+        for i in range(n):
+            next_state = init_jp + sub * i
+            self.set_joints(next_state)
+            colcheck = self._checkInitCollision(self.cID, emptyBuff)
+            if colcheck == 1:
+                print('colliding during direct path')
+                return 1
+        print('reaching by direct path')
+        return 0
+
     def render(self, mode='human', close=False):
         pass
 
@@ -138,9 +160,9 @@ def main(args):
     path0 = os.getcwd()
     hi = path0.find('home') + 5
     homepath = path0[:path0.find('/', hi)]
-    workpath = homepath+'/vdp/4_5/'
+    workpath = homepath+'/vdp/4_6/'
     path1 = path0[:path0.rfind('/')]
-    model_path = os.path.join(path1, 'train/h5files/5dof_model4.h5')
+    model_path = os.path.join(path1, 'train/h5files/model_simple_weights5.h5')
     if not os.path.exists(workpath):
         os.mkdir(workpath)
     dirlist = os.listdir(workpath)
@@ -153,7 +175,9 @@ def main(args):
     askvrep = False
     env = UR5DaggerSample(modelfile=model_path, askvrep=askvrep)
     i = maxdir + 1
-    while i < maxdir + 20:
+    success = 0
+    dsuccess = 0
+    while i < maxdir + 200:
         print('iter:', i)
         collision = env.reset()
         if collision:
@@ -164,7 +188,7 @@ def main(args):
             obs = []
             acs = []
             exp_acs = []
-            for t in range(50):
+            for t in range(100):
                 action, expert_action, check = env.step(t)
                 if check:
                     break
@@ -182,6 +206,16 @@ def main(args):
             if len(obs) != 0:
                 with open(str(i)+'/data.pkl', 'wb') as f:
                     pickle.dump(data, f)
+
+            if check == 0:
+                print('time end')
+            elif check == 1:
+                success = success + 1
+            print('policy success rate:', success/(i-maxdir))
+            dcheck = env.directly_towards(40)
+            if dcheck == 0:
+                dsuccess = dsuccess + 1
+            print('linear path success rate:', dsuccess/(i-maxdir))
             i = i + 1
         else:
             print("collision at initial or target pose")
