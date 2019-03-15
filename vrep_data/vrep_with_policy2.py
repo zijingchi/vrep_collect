@@ -14,6 +14,9 @@ pi = np.pi
 
 
 class MDN_policy(UR5WithCameraSample):
+    """
+    mdn policy execution class
+    """
     metadata = {'render.modes': [], }
 
     def __init__(

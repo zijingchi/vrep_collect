@@ -15,6 +15,9 @@ pi = np.pi
 
 
 class UR5DaggerSample(UR5WithCameraSample):
+    """
+    regular policy model execution class
+    """
     metadata = {'render.modes': [], }
 
     def __init__(
@@ -36,15 +39,30 @@ class UR5DaggerSample(UR5WithCameraSample):
         self.model = None
         self.askvrep=askvrep
         if modelfile:
-            self.model = model_with_config_n_target2(3)
-            self.model.load_weights(modelfile)
+            #self.model = model_with_config_n_target2(3)
+            #self.model.load_weights(modelfile)
+            self.model = load_model(modelfile)
 
-        print('UR5DaggerSample: initialized')
+        #print('UR5DaggerSample: initialized')
 
-    def _transpose(self, nparray):
-        m = np.mat(nparray).T
-        m.shape = (1, nparray.size)
-        return m
+    def _adddim(self, nparray):
+        newa = np.empty(tuple([1]) + nparray.shape, float)
+        newa[0] = nparray
+        return newa
+
+    def _model_input(self):
+        x1 = self._adddim(self.observation['joint'][:3])
+        x2 = self._adddim(self.target_joint_pos[:3])
+        x3 = self._adddim(self.obstacle_pos)
+        x4 = self._adddim(self.obstacle_ori)
+        return [x1, x2, x3, x4]
+
+    def _model_output_process(self, out, thresh):
+        action = np.concatenate((out[0], np.zeros(2)))
+        action = np.deg2rad(action)
+        action = 1.3 * action + 1.1 * thresh * (self.target_joint_pos - self.observation['joint']) / config_dis(
+            self.target_joint_pos, self.observation['joint'])
+        return action
 
     def step(self, t):
         self._make_observation()    # make an observation
@@ -54,18 +72,9 @@ class UR5DaggerSample(UR5WithCameraSample):
         emptyBuff = bytearray()
         thresh = 0.1
         if self.model:
-            x1 = self._transpose(config[:3])
-            x2 = self._transpose(self.target_joint_pos[:3])
-            x3 = self._transpose(self.obstacle_pos)
-            x4 = self._transpose(self.obstacle_ori)
-            #x3 = self._transpose(np.concatenate((self.obstacle_pos, self.obstacle_ori)))
-            #x3 = obs_pt2(self.obstacle_pos, self.obstacle_ori)
-            #x3.shape = (1, 8, 3)
-            action = self.model.predict([x1, x2, x3, x4])
-            action = np.concatenate((action[0], np.zeros(2)))
-            action = np.deg2rad(action)
-            action = 1.5 * action + 1.1 * thresh * (self.target_joint_pos - config) / np.linalg.norm(
-                self.target_joint_pos[:3] - config[:3])
+            model_input = self._model_input()
+            action = self.model.predict(model_input)
+            action = self._model_output_process(action, thresh)
 
             self._make_action(action)   # make the action
             self.step_simulation()
@@ -120,6 +129,11 @@ class UR5DaggerSample(UR5WithCameraSample):
         while self.sim_running:
             self.stop_simulation()
 
+        self.init_joint_pos = np.array([0, -pi / 12, -3 * pi / 4, 0, pi / 2])
+        init_w = [0.4, 0.1, 0.1, 0.5, 0.5]
+        for i in range(len(self.init_joint_pos) - 1):
+            self.init_joint_pos[i] = self.init_joint_pos[i] + init_w[i] * np.random.randn()
+
         self.target_joint_pos = np.array([0.2*np.random.randn(), 0.1*np.random.randn()-pi/3,
         0.2*np.random.randn()-pi/3, 0.3*np.random.randn(), 0.2*np.random.randn()+pi/2])
         
@@ -127,7 +141,7 @@ class UR5DaggerSample(UR5WithCameraSample):
         colcheck = self.set_obs_pos2()
 
         self.inits = {'target_joint_pos': self.target_joint_pos,
-                      'obstacle_pos': np.array(self.obstacle_pos),
+                      'obstacle_pos': self.obstacle_pos,
                       'obstacle_ori': self.obstacle_ori}
         self.step_simulation()
         if colcheck == 1:
@@ -136,21 +150,6 @@ class UR5DaggerSample(UR5WithCameraSample):
             self.step_simulation()
 
         return colcheck
-
-    def directly_towards(self, n):
-        emptyBuff = bytearray()
-
-        init_jp = np.array(self.init_joint_pos)
-        sub = (self.target_joint_pos - init_jp)/n
-        for i in range(n):
-            next_state = init_jp + sub * i
-            self.set_joints(next_state)
-            colcheck = self._checkInitCollision(self.cID, emptyBuff)
-            if colcheck == 1:
-                print('colliding during direct path')
-                return 1
-        print('reaching by direct path')
-        return 0
 
     def render(self, mode='human', close=False):
         pass
@@ -162,7 +161,7 @@ def main(args):
     homepath = path0[:path0.find('/', hi)]
     workpath = homepath+'/vdp/4_6/'
     path1 = path0[:path0.rfind('/')]
-    model_path = os.path.join(path1, 'train/h5files/model_simple_weights5.h5')
+    model_path = os.path.join(path1, 'train/h5files/3dof_model.h5')
     if not os.path.exists(workpath):
         os.mkdir(workpath)
     dirlist = os.listdir(workpath)

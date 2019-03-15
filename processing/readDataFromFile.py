@@ -8,13 +8,17 @@ import pickle
 class ReadDataBase(object):
 
     def __init__(self, dataset_path, data_num):
-        self.num = data_num
         self.path = dataset_path
         self.img1 = []
         self.img2 = []
         self.actions = []
         self.configs = []
-        self.dir = os.path.join(dataset_path, data_num)
+
+    def subdir_filename(self, sub):
+        dir = os.path.join(self.path, sub)
+        imgpath = [os.path.join(dir, 'img1'), os.path.join(dir, 'img2')]
+        pklname = os.path.join(dir, 'data.pkl')
+        return dir, imgpath, pklname
 
     def strs2float(self, line):
         numbers = re.split("\s+", line)
@@ -31,80 +35,8 @@ class ReadDataBase(object):
         action = self.actions[i]
         return observation, action
 
-    def load(self):
+    def load(self, subdir, rad2deg=False):
         pass
-
-
-class DataFromDir(ReadDataBase):
-
-    def __init__(self, dataset_path, data_num):
-        ReadDataBase.__init__(self, dataset_path, data_num)
-        self.img1dir = os.path.join(self.dir , "img1")
-        self.img2dir = os.path.join(self.dir, "img2")
-        self.acfile = os.path.join(self.dir, "action.txt")
-        self.obsfile = os.path.join(self.dir, "observation_joints.txt")
-
-    def read_imgs(self):
-        img1 = []
-        img2 = []
-        for name in os.listdir(self.img1dir):
-            img_name = os.path.join(self.img1dir, name)
-            img = cv2.imread(img_name)
-            img1.append([int(name[:-4]), cv2.cvtColor(img, cv2.COLOR_BGR2RGB)])
-        for name in os.listdir(self.img2dir):
-            img_name = os.path.join(self.img2dir, name)
-            img = cv2.imread(img_name)
-            img2.append([int(name[:-4]), cv2.cvtColor(img, cv2.COLOR_BGR2RGB)])
-        img1.sort(key=lambda s: s[0])
-        img2.sort(key=lambda s: s[0])
-        self.img1 = [a[1] for a in img1]
-        self.img2 = [a[1] for a in img2]
-
-    def read_actions(self):
-        with open(self.acfile, "r") as f:
-            actions = f.readlines()
-            for i in range(len(actions)):
-                faction = self.strs2float(actions[i])
-                if len(faction) == 6:
-                    self.actions.append(faction)
-                elif len(faction) == 4:
-                    nextaction = actions[i+1]
-                    nextfaction = self.strs2float(nextaction)
-                    faction.extend(nextfaction)
-                    self.actions.append(faction)
-
-    def read_configs(self):
-        fconfigs = []
-        with open(self.obsfile, "r") as f:
-            configs = f.readlines()
-            for i in range(len(configs)):
-                config = configs[i]
-                fconfig = self.strs2float(config)
-                if len(fconfig) == 6:
-                    fconfigs.append(fconfig)
-                elif len(fconfig) == 4:
-                    nextconfig = configs[i+1]
-                    nextfconfig = self.strs2float(nextconfig)
-                    fconfig.extend(nextfconfig)
-                    fconfigs.append(fconfig)
-        self.configs = fconfigs
-
-    def load(self, rad2deg=True):
-        res = 1
-        self.read_imgs()
-        self.read_configs()
-        self.read_actions()
-        if rad2deg:
-            self.rad2deg()
-        if not (len(self.actions) == len(self.configs) == len(self.img1) == len(self.img2)):
-            print(self.num, "tuple length not match!")
-            self.actions = []
-            self.configs = []
-            self.img1 = []
-            self.img2 = []
-            res = 0
-        return res
-
 
 class DataFromPkl(ReadDataBase):
 
@@ -144,42 +76,84 @@ class DataFromPkl(ReadDataBase):
         return observation, action
 
 
-class DataFromDirPkl(DataFromDir):
+class DataFromDirPkl(object):
 
-    def __init__(self, dataset_path, data_num):
-        DataFromDir.__init__(self, dataset_path, data_num)
-        self.inits = []
-        self.depth = []
+    def __init__(self, dataset_path):
+        self.path = dataset_path
 
-    def load(self, rad2deg=False, load_depth=False):
-        pkl_path = os.path.join(self.dir, "data.pkl")
-        res = 1
-        self.read_imgs()
+    def read_imgs(self, imgpath):
+        self.img1 = []
+        self.img2 = []
+        imgpath1, imgpath2 = imgpath[0], imgpath[1]
+        for s in os.listdir(imgpath1):
+            imgname = os.path.join(imgpath1, s)
+            img = cv2.imread(imgname)
+            self.img1.append(img)
+        for s in os.listdir(imgpath2):
+            imgname = os.path.join(imgpath2, s)
+            img = cv2.imread(imgname)
+            self.img2.append(img)
+
+    def subdir_filename(self, sub):
+        dir = os.path.join(self.path, sub)
+        imgpath = [os.path.join(dir, 'img1'), os.path.join(dir, 'img2')]
+        pklname = os.path.join(dir, 'data.pkl')
+        return dir, imgpath, pklname
+
+    def load(self, subdir, load_img=False):
+        _, imgpath, pkl_path = self.subdir_filename(subdir)
+        if load_img:
+            self.read_imgs(imgpath)
         with open(pkl_path, "rb") as f:
             data = pickle.load(f)
-            self.actions = data['actions']
-            self.inits = data['inits']
-            obs = data['observations']
-            self.configs = [ob['joint'] for ob in obs]
-            if load_depth:
-                self.depth = [ob['depth'] for ob in obs]
-        if not (len(self.actions) == len(self.configs) == len(self.img1) == len(self.img2)):
-            print(self.num, "tuple length not match!")
+        self.actions = data['actions']
+        self.configs = data['observations']
+        ni = len(self.actions)
+        if np.linalg.norm(self.actions[0]) > 0.3:
+            ni = ni - 1
+            self.actions = self.actions[1:]
+            self.configs = self.configs[1:]
+        self.actions = np.array(self.actions)
+        inits = data['inits']
+        self.tar_pos = np.empty((ni, 5), dtype=float)
+        self.obstacle_pos = np.empty((ni, 3), dtype=float)
+        self.obstacle_ori = np.empty((ni, 3), dtype=float)
+        for i in range(ni):
+            self.tar_pos[i, ] = inits['target_joint_pos']
+            self.obstacle_pos[i, ] = inits['obstacle_pos']
+            self.obstacle_ori[i, ] = inits['obstacle_ori']
+
+        if not (ni == len(self.configs)):
+            print(subdir, "tuple length not match!")
             self.actions = []
             self.configs = []
-            self.img1 = []
-            self.img2 = []
-            res = 0
-        if rad2deg:
-            self.rad2deg()
-        return res
+            ni = 0
 
-    def select_single(self, i):
-        observation = {"config": self.configs[i], "img1": self.img1[i], "img2": self.img2[i], "inits": self.inits}
-        if len(self.depth) != 0:
-            observation["depth"] = self.depth[i]
-        action = self.actions[i]
-        return observation, action
+        return ni
+
+    def configs_sequence(self, maxsize, n):
+        dof = self.configs[0].size
+        zlist = self.sequence_maxsize(maxsize, n)
+        configs = np.zeros((n, maxsize, dof))
+        #lens = []
+        for i in range(n):
+            for j, s in enumerate(zlist[i]):
+                #configs[i, j, ] = self.configs[s]
+                configs[i, maxsize-1-j,] = self.configs[s]
+        return configs
+
+    def sequence_maxsize(self, maxsize, n):
+        """
+        maxsize: max length of a sequence
+        n: length of the original sequence
+        """
+        zlist = []
+        for i in range(1, min(n, maxsize)+1):
+            zlist.append(list(range(i)))
+        if n > maxsize:
+            for i in range(1, n - maxsize + 1):
+                zlist.append(list(range(i, i + maxsize)))
+        return zlist
 
 
 class DataPack(object):
@@ -240,10 +214,10 @@ class DataFromIndex(object):
             obs = pkl_data['observations']
             # config = obs[t]['joint']
             config = obs[t]
-            tar_pos = np.array(inits['target_joint_pos'])
+            tar_pos = inits['target_joint_pos']
             if self.load_depth:
                 observation['depth'] = obs[t]['depth']
-            obstacle_pos = np.array(inits['obstacle_pos'])
+            obstacle_pos = inits['obstacle_pos']
             obstacle_ori = inits['obstacle_ori']
             if flagd:
                 dagger_pkl = os.path.join(datadir, 'dagger.pkl')
@@ -253,6 +227,9 @@ class DataFromIndex(object):
             else:
                 actions = pkl_data['actions']
                 action = actions[t]
+                if np.linalg.norm(action) > 0.5:
+                    action = actions[-1]
+                    config = obs[t+1]-action
 
         if self.rad2deg:
             #config = np.rad2deg(config)

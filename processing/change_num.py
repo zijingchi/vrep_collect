@@ -4,12 +4,12 @@ import numpy as np
 """
     REMEMBER TO CHECK IF THE DATAPATH IS WHAT YOU EXPECT!!!!!!!!!!
 """
-datapath = '/home/ubuntu/vrep_path_dataset/7'
+datapath = '/home/ubuntu/vdp/4_7'
 
 
 def change_name(datapath):
     dirlist = os.listdir(datapath)
-    dirlist.sort(key=lambda s: int(s[1:]))
+    dirlist.sort(key=lambda s: int(s))
     if 'list0.pkl' in dirlist:
         raise RuntimeError('not the new dataset!')
     s = 0
@@ -18,7 +18,7 @@ def change_name(datapath):
     try:
         for d, n in zip(dirlist, numlist):
             oldname = os.path.join(datapath, d)
-            newname = os.path.join(datapath, str(n))
+            newname = os.path.join(datapath, 'd' + str(n))
             if os.path.isdir(oldname):
                 os.rename(oldname, newname)
     except OSError as e:
@@ -38,7 +38,30 @@ def separate_train_test2(datapath, listpkl, listpkl0=None):
                     for i in range(len(data['actions'])):
                         id_list.append(d + '-' + str(i))
     id_size = len(id_list)
-    train_size = int(0.75 * id_size)
+    train_size = int(0.8 * id_size)
+    np.random.shuffle(id_list)
+    train_list = id_list[:train_size]
+    vali_list = id_list[train_size:]
+    if listpkl0:
+        with open(os.path.join(datapath, listpkl0), 'rb') as f0:
+            list0 = pickle.load(f0)
+            train_list = train_list + list0['train']
+            vali_list = vali_list + list0['test']
+    with open(os.path.join(datapath, listpkl), 'wb') as f1:
+        pickle.dump({'train': train_list, 'test': vali_list}, f1)
+
+
+def separate_train_test3(datapath, listpkl, listpkl0=None):
+    dirlist = os.listdir(datapath)
+    id_list = []
+    for d in dirlist:
+        subdir = os.path.join(datapath, d)
+        if os.path.isdir(subdir):
+            datapkl = os.path.join(subdir, 'data.pkl')
+            if os.path.exists(datapkl):
+                id_list.append(d)
+    id_size = len(id_list)
+    train_size = int(0.8 * id_size)
     #np.random.shuffle(id_list)
     train_list = id_list[:train_size]
     vali_list = id_list[train_size:]
@@ -52,4 +75,4 @@ def separate_train_test2(datapath, listpkl, listpkl0=None):
 
 
 #change_name(datapath)
-separate_train_test2(datapath, 'list0.pkl')
+separate_train_test2(datapath, 'list1.pkl')

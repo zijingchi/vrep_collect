@@ -1,8 +1,9 @@
 import numpy as np
 import keras
 # import os
-from processing.readDataFromFile import DataFromIndex
+from processing.readDataFromFile import DataFromIndex, DataFromDirPkl
 from processing.angle_dis import obs_pt2, cal_avo_dir
+from keras.preprocessing.sequence import pad_sequences
 
 
 class CustomDataGenWthImg(keras.utils.Sequence):
@@ -93,12 +94,65 @@ class CustomDataGenWthTarCfg(keras.utils.Sequence):
 
         for i, ID in enumerate(list_IDs_temp):
             obs, act = self.datafromindex.read_per_index(ID)
-
             configs[i,] = obs['config'][:dof]
             tar_pos_config[i,] = obs['tar_pos'][:dof]
             obstacle_pos[i,] = obs['obstacle_pos']
             obstacle_ori[i,] = obs['obstacle_ori']
-            avo = cal_avo_dir(act[:dof], obs['tar_pos'][:dof], obs['config'][:dof], 0.11)
-            actions[i,] = np.rad2deg(avo[:dof])
+            avo = cal_avo_dir(act, obs['tar_pos'], obs['config'], 0.1, dof)
+            actions[i,] = np.rad2deg(avo)
 
         return [configs, tar_pos_config, obstacle_pos, obstacle_ori], actions
+
+
+class CustomDataGenWthTarCfgSqc(keras.utils.Sequence):
+
+    def __init__(self, datapath, list_IDs, dof, max_step, batch_size, shuffle=True):
+        self.batch_size = batch_size
+        self.dof = dof
+        self.maxstep = max_step
+        self.datapath = datapath
+        self.dataloader = DataFromDirPkl(datapath)
+        self.list_IDs = list_IDs
+        self.indexes = np.arange(len(self.list_IDs))
+        self.shuffle = shuffle
+        self.on_epoch_end()
+
+    def __len__(self):
+        """Denotes the number of batches per epoch"""
+        return int(np.floor(len(self.indexes) / self.batch_size))
+
+    def __getitem__(self, index):
+        """Generate one batch of data"""
+        indexes = self.indexes[index*self.batch_size:(index+1)*self.batch_size]
+        list_IDs_temp = [self.list_IDs[k] for k in indexes]
+        # Generate data
+        X, y = self.__data_generation(list_IDs_temp)
+        return X, y
+
+    def on_epoch_end(self):
+        """Updates indexes after each epoch"""
+        self.indexes = np.arange(len(self.list_IDs))
+        if self.shuffle == True:
+            np.random.shuffle(self.indexes)
+
+    def __data_generation(self, list_IDs_temp):
+        dof = self.dof
+        actions = np.empty((0, 3), float)
+        tar_joint_pos = np.empty((0, dof), float)
+        obs_pos = np.empty((0, 3), float)
+        obs_ori = np.empty((0, 3), float)
+        configs_sequence = np.empty((0, self.maxstep, dof), float)
+        for i, ID in enumerate(list_IDs_temp):
+            ni = self.dataloader.load(ID)
+            configs = self.dataloader.configs_sequence(self.maxstep, ni)
+            acs = self.dataloader.actions
+            tar = self.dataloader.tar_pos[0]
+            for j in range(ni):
+                acs[j] = cal_avo_dir(acs[j], tar, self.dataloader.configs[j], 0.1, 5)
+            actions = np.append(actions, acs[:, :3], 0)
+            tar_joint_pos = np.append(tar_joint_pos, self.dataloader.tar_pos, 0)
+            obs_pos = np.append(obs_pos, self.dataloader.obstacle_pos, 0)
+            obs_ori = np.append(obs_ori, self.dataloader.obstacle_ori, 0)
+            configs_sequence = np.append(configs_sequence, configs, 0)
+
+        return [configs_sequence, tar_joint_pos, obs_pos, obs_ori], actions

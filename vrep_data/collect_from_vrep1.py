@@ -47,10 +47,7 @@ class UR5WithCameraSample(vrep_env.VrepEnv):
         self.camera2 = self.get_object_handle('camera2')
         self.goal_viz = self.get_object_handle('Cuboid')
         self.tip = self.get_object_handle('tip')
-        self.init_joint_pos = [0, -pi / 12, -3 * pi / 4, 0, pi / 2]
-        init_w = [0.5, 0.2, 0.2, 0.3, 0.3]
-        for i in range(len(self.init_joint_pos)-1):
-            self.init_joint_pos[i] = self.init_joint_pos[i] + init_w[i] * np.random.randn()
+
         h = 256
         w = 256
         c = 3
@@ -58,7 +55,7 @@ class UR5WithCameraSample(vrep_env.VrepEnv):
         # Actuators
         self.oh_joint = list(map(self.get_object_handle, ur5_joints))
 
-        print('UR5VrepEnv: initialized')
+        #print('UR5VrepEnv: initialized')
 
     def _make_observation(self):
         """Get observation from v-rep and stores in self.observation
@@ -155,7 +152,7 @@ class UR5WithCameraSample(vrep_env.VrepEnv):
         self.obstacle_pos[1] = self.obstacle_pos[1] + 0.05 * np.random.randn()
         self.obstacle_pos[2] = self.obstacle_pos[2] + 0.3 * (np.random.rand() + 0.1)
         self.obj_set_position(self.obstable, self.obstacle_pos)
-        self.obstacle_ori = 0.1 * np.random.rand(3)
+        self.obstacle_ori = 0.2 * np.random.rand(3)
         self.obstacle_ori[2] = self.obstacle_ori[2] + pi / 2
         self.obj_set_orientation(self.obstable, self.obstacle_ori)
         emptyBuff = bytearray()
@@ -194,6 +191,23 @@ class UR5WithCameraSample(vrep_env.VrepEnv):
         else:
             return 0
 
+    def directly_towards(self, n):
+        emptyBuff = bytearray()
+
+        init_jp = self.init_joint_pos
+        sub = (self.target_joint_pos - init_jp)/n
+        self.linear_sub = []
+        for i in range(n):
+            next_state = init_jp + sub * (i + 1)
+            self.linear_sub.append(next_state)
+            self.set_joints(next_state)
+            colcheck = self._checkInitCollision(self.cID, emptyBuff)
+            if colcheck == 1:
+                print('colliding during direct path')
+                return 1
+        print('reaching by direct path')
+        return 0
+
     def step(self, t):
         self._make_observation()
         next_state = self.path[t+1]
@@ -210,6 +224,12 @@ class UR5WithCameraSample(vrep_env.VrepEnv):
             self.stop_simulation()
         while self.sim_running:
             self.stop_simulation()
+
+        self.init_joint_pos = np.array([0, -pi / 12, -3 * pi / 4, 0, pi / 2])
+        init_w = [0.6, 0.3, 0.3, 0.5, 0.5]
+        for i in range(len(self.init_joint_pos) - 1):
+            self.init_joint_pos[i] = self.init_joint_pos[i] + init_w[i] * np.random.randn()
+
         self.target_joint_pos = [0.2 * np.random.randn(), 0.1 * np.random.randn() - pi / 3,
                                 0.1 * np.random.randn() - pi / 3, 0.3 * np.random.randn(),
                                 0.2 * np.random.randn() + pi / 2]
@@ -218,23 +238,28 @@ class UR5WithCameraSample(vrep_env.VrepEnv):
         found = False
 
         colcheck = self.set_obs_pos2()
-        self.inits = {'target_joint_pos': np.array(self.target_joint_pos),
-                      'obstacle_pos': np.array(self.obstacle_pos),
+        self.inits = {'target_joint_pos': self.target_joint_pos,
+                      'obstacle_pos': self.obstacle_pos,
                       'obstacle_ori': self.obstacle_ori}
+        thresh = 0.1
         if colcheck == 1:
+            n_mid = int(config_dis(self.target_joint_pos, self.init_joint_pos)/thresh)
+            linear_res, _ = self.directly_towards(n_mid)
             self.set_joints(self.init_joint_pos)
             self.step_simulation()
-            self.current_state = np.array(self.init_joint_pos).astype('float32')
+            if linear_res == 0:
+                self.path = self.linear_sub
+                self.n_path = n_mid
+                return True
+
             clientID = self.cID
-            inFloats = self.init_joint_pos + self.target_joint_pos
+            inFloats = self.init_joint_pos.tolist() + self.target_joint_pos.tolist()
             emptyBuff = bytearray()
             n_path, path, res = self._calPathThroughVrep(clientID, 400, inFloats, emptyBuff)
             if (res == 0) & (n_path != 0):
                 np_path = np.array(path)
                 re_path = np_path.reshape((n_path, 5))
-                # re_path = re_path[:, 0:5]
-                thresh = 0.1
-                c0 = np.array(self.init_joint_pos)
+                c0 = self.init_joint_pos
                 final_path = [c0]
                 for c in re_path:
                     if config_dis(c, c0) > thresh:
@@ -260,7 +285,7 @@ def main(args):
     path0 = os.getcwd()
     hi = path0.find('home') + 5
     homepath = path0[:path0.find('/', hi)]
-    workpath = homepath + '/vrep_path_dataset/5/'
+    workpath = homepath + '/vdp/4_3/'
     if not os.path.exists(workpath):
         os.mkdir(workpath)
     dirlist = os.listdir(workpath)
@@ -272,7 +297,7 @@ def main(args):
     os.chdir(workpath)
     env = UR5WithCameraSample()
     i = maxdir + 1
-    while i < 150:
+    while i < maxdir + 250:
         print('iter:', i)
         found = env.reset()
         if found:

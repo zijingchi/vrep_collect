@@ -64,10 +64,10 @@ def model_with_config_n_target2(dof):
     x1 = Dense(256, name='config_dense2')(x1)
 
     x1 = Activation(activation='relu', name='config_relu2')(x1)
-    x1 = Dense(128, activation='relu',
+    x1 = Dense(256, activation='relu',
                kernel_regularizer=regularizers.l1(l1_regu),
                name='config_dense3')(x1)
-    x1 = Dense(128, name='config_dense4')(x1)
+    x1 = Dense(256, name='config_dense4')(x1)
     x1 = BatchNormalization(name='config_bn2')(x1)
     x1 = Activation(activation='sigmoid', name='config_sigmoid1')(x1)
 
@@ -98,7 +98,10 @@ def model_with_config_n_target2(dof):
     x3 = BatchNormalization(name='tar_bn1')(x3)
     x3 = Activation('relu', name='tar_relu1')(x3)
     x3 = Dense(256, activation='relu', name='tar_dense2')(x3)
-    x3 = Dense(128, name='tar_dense3')(x3)
+    x3 = Dense(256, activation='relu',
+               kernel_regularizer=regularizers.l1(l1_regu),
+               name='tar_dense3')(x3)
+    x3 = Dense(128, name='tar_dense4')(x3)
     x3 = BatchNormalization(name='tar_bn2')(x3)
     x3 = Activation('sigmoid', name='tar_sigmoid1')(x3)
 
@@ -122,7 +125,6 @@ def model_with_config_n_target2(dof):
     beta = Dense(1, kernel_regularizer=regularizers.l1(l1_regu),
                  bias_regularizer=regularizers.l1(l1_regu),
                  activation='relu', name='sub_dense3')(x4)"""
-    final_output = act1
 
     #final_output = Add(name='add')([act1, x4])
     final_output = Dense(dof, name='final_output')(act1)
@@ -172,13 +174,13 @@ def weighted_logcosh(y_true, y_pred):
 
 def train_with_generator(datapath, batch_size, epochs, dof):
     model = model_with_config_n_target2(dof)
-    h5file = './h5files/5dof_model5.h5'
-    model.load_weights(h5file)
+    #h5file = './h5files/5dof_model5.h5'
+    #model.load_weights(h5file)
     model.compile(loss=losses.logcosh,
                   optimizer=optimizers.Adam(lr=2e-2, beta_1=0.9, beta_2=0.999, decay=5e-3),
                   metrics=['mse'])
     #plot_model(model, to_file='5dof_model1.jpg', show_shapes=True)
-    with open(os.path.join(datapath, 'list0.pkl'), 'rb') as f:
+    with open(os.path.join(datapath, 'list1.pkl'), 'rb') as f:
         lists = pickle.load(f)
         train_list = lists['train']
         vali_list = lists['test']
@@ -190,18 +192,18 @@ def train_with_generator(datapath, batch_size, epochs, dof):
                                       list_IDs=vali_list,
                                       data_size=dof,
                                       batch_size=batch_size)
-    checkpoint = ModelCheckpoint(filepath='./h5files/model_simple_weights5.h5', monitor='val_mean_squared_error',
-                                 save_best_only=True, save_weights_only=True, mode='min')
+    checkpoint = ModelCheckpoint(filepath='./h5files/3dof_mid_model.h5', monitor='val_mean_squared_error',
+                                 save_best_only=True, save_weights_only=False, mode='min')
     model.fit_generator(generator=train_gen,
                         epochs=epochs,
                         validation_data=vali_gen,
                         use_multiprocessing=True,
-                        callbacks=[TensorBoard(log_dir='./tensorboard_logs/3dof_model5/log'), checkpoint],
+                        callbacks=[TensorBoard(log_dir='./tensorboard_logs/3dof_model/log'), checkpoint],
                         workers=2)
-    model.save('./h5files/3dof_model5.h5')
+    model.save('./h5files/3dof_model.h5')
 
 
 if __name__ == '__main__':
-    datapath = '/home/ubuntu/vdp/4_3/'
-    #separate_train_test2(datapath)
-    train_with_generator(datapath, 100, 100, 3)
+    datapath = '/home/ubuntu/vdp/4_7/'
+
+    train_with_generator(datapath, 100, 300, 3)
