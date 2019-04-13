@@ -25,20 +25,20 @@ class UR5ObsColCheck(UR5WithCameraSample):
                                           0.2 * np.random.randn() - pi / 3, 0.3 * np.random.randn(),
                                           0.2 * np.random.randn() + pi / 2])
 
-        theta1_left = -1.
-        theta1_right = 1.
-        theta2_left = -1.2
-        theta2_right = 0.4
+        theta1_left = -1.6
+        theta1_right = 1.6
+        theta2_left = -1.9
+        theta2_right = 0.9
         theta3_left = -2.7
-        theta3_right = 0.
+        theta3_right = 0.3
         theta4_left = -1.
         theta4_right = 1.
         theta5_left = 0.3
         theta5_right = 2.7
 
-        theta1_sample = np.linspace(theta1_left, theta1_right, 20)
-        theta2_sample = np.linspace(theta2_left, theta2_right, 20)
-        theta3_sample = np.linspace(theta3_left, theta3_right, 20)
+        theta1_sample = np.linspace(theta1_left, theta1_right, 32)
+        theta2_sample = np.linspace(theta2_left, theta2_right, 32)
+        theta3_sample = np.linspace(theta3_left, theta3_right, 32)
         theta4_sample = np.linspace(theta4_left, theta4_right, 3)
         theta5_sample = np.linspace(theta5_left, theta5_right, 3)
 
@@ -47,11 +47,12 @@ class UR5ObsColCheck(UR5WithCameraSample):
         for t1 in theta1_sample:
             for t2 in theta2_sample:
                 for t3 in theta3_sample:
-                    if (alpha*t2 + t3 < -pi) or (alpha*t2 + t3 > -pi/4):
+                    if (alpha*t2 + t3 < -6*pi/5) or (alpha*t2 + t3 > 0):
                         continue
-                    for t4 in theta4_sample:
+                    thetas_sample.append([t1,t2,t3])
+                    '''for t4 in theta4_sample:
                         for t5 in theta5_sample:
-                            thetas_sample.append([t1, t2, t3, t4, t5])
+                            thetas_sample.append([t1, t2, t3, t4, t5])'''
         print(len(thetas_sample))
         self.thetas_sample = np.array(thetas_sample)
         print('theta samples initialized')
@@ -60,7 +61,7 @@ class UR5ObsColCheck(UR5WithCameraSample):
         n = self.n
         obs_poses = np.empty(shape=(n, 6), dtype=float)
         for i in range(n):
-            obs_pos = [0.4 * np.random.randn(), -0.49 + 0.3 * np.random.randn(), 0.32 + 0.3 * np.random.randn()]
+            obs_pos = [0.4 * np.random.randn(), -0.49 + 0.3 * np.random.randn(), 0.33 + 0.3 * np.random.randn()]
             obs_poses[i, :3] = np.array(obs_pos)
             obs_ori = 0.2 * np.random.randn(3)
             obs_ori[2] = obs_ori[2] + pi / 2
@@ -120,14 +121,13 @@ def examine_states(datapath):
     return col_states, col_counts, col_sort
 
 
-
 def main():
     path0 = os.getcwd()
     hi = path0.find('home') + 5
     homepath = path0[:path0.find('/', hi)]
     workpath = homepath + '/vdp/colstates'
-    datapath1 = workpath + '/2'
-    examine_states(datapath1)
+    datapath1 = workpath + '/3'
+    #examine_states(datapath1)
     if not os.path.exists(workpath):
         os.mkdir(workpath)
     dirlist = os.listdir(workpath)
@@ -140,7 +140,7 @@ def main():
     next_dir = str(maxdir+1)
     os.mkdir(next_dir)
 
-    env = UR5ObsColCheck(50)
+    env = UR5ObsColCheck(100)
     env.reset()
     for i in range(len(env.obstacle)):
         print(i)

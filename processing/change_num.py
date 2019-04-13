@@ -4,7 +4,7 @@ import numpy as np
 """
     REMEMBER TO CHECK IF THE DATAPATH IS WHAT YOU EXPECT!!!!!!!!!!
 """
-datapath = '/home/ubuntu/vdp/4_7'
+datapath = '/home/ubuntu/vdp/5_2'
 
 
 def change_name(datapath):
@@ -39,7 +39,7 @@ def separate_train_test2(datapath, listpkl, listpkl0=None):
                         id_list.append(d + '-' + str(i))
     id_size = len(id_list)
     train_size = int(0.8 * id_size)
-    np.random.shuffle(id_list)
+    #np.random.shuffle(id_list)
     train_list = id_list[:train_size]
     vali_list = id_list[train_size:]
     if listpkl0:
@@ -75,4 +75,4 @@ def separate_train_test3(datapath, listpkl, listpkl0=None):
 
 
 #change_name(datapath)
-separate_train_test2(datapath, 'list1.pkl')
+separate_train_test2(datapath, 'list0.pkl')

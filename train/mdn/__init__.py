@@ -15,6 +15,7 @@ import tensorflow_probability as tfp
 
 tfd = tfp.distributions
 
+
 def elu_plus_one_plus_epsilon(x):
     """ELU activation with a very small addition to help prevent NaN in loss."""
     return (K.elu(x) + 1 + 1e-8)
@@ -93,6 +94,54 @@ class subMDN(MDN):
     def compute_output_shape(self, input_shape):
         """Returns output shape, showing the number of mixture parameters."""
         return (input_shape[0], (2 * self.output_dim * self.num_mix) + self.num_mix + 1)
+
+
+class MDNSimp(Layer):
+    """A Mixture Density Network Layer for Keras.
+    This layer has a few tricks to avoid NaNs in the loss function when training:
+        - Activation for variances is ELU + 1 + 1e-8 (to avoid very small values)
+        - Mixture weights (pi) are trained in as logits, not in the softmax space.
+
+    A loss function needs to be constructed with the same output dimension and number of mixtures.
+    A sampling function is also provided to sample from distribution parametrised by the MDN outputs.
+    """
+
+    def __init__(self, output_dimension, num_mixtures, **kwargs):
+        self.output_dim = output_dimension
+        self.num_mix = num_mixtures
+        with tf.name_scope('MDNSimp'):
+            self.mdn_mus = Dense(self.num_mix * self.output_dim, name='mdn_mus')  # mix*output vals, no activation
+            self.mdn_sigmas = Dense(self.num_mix, activation=elu_plus_one_plus_epsilon, name='mdn_sigmas')  # mix*output vals exp activation
+            self.mdn_pi = Dense(self.num_mix, name='mdn_pi')  # mix vals, logits
+        super(MDNSimp, self).__init__(**kwargs)
+
+    def build(self, input_shape):
+        self.mdn_mus.build(input_shape)
+        self.mdn_sigmas.build(input_shape)
+        self.mdn_pi.build(input_shape)
+        self.trainable_weights = self.mdn_mus.trainable_weights + self.mdn_sigmas.trainable_weights + self.mdn_pi.trainable_weights
+        self.non_trainable_weights = self.mdn_mus.non_trainable_weights + self.mdn_sigmas.non_trainable_weights + self.mdn_pi.non_trainable_weights
+        super(MDNSimp, self).build(input_shape)
+
+    def call(self, x, mask=None):
+        with tf.name_scope('MDNSimp'):
+            mdn_out = keras.layers.concatenate([self.mdn_mus(x),
+                                                self.mdn_sigmas(x),
+                                                self.mdn_pi(x)],
+                                               name='mdn_outputs')
+        return mdn_out
+
+    def compute_output_shape(self, input_shape):
+        """Returns output shape, showing the number of mixture parameters."""
+        return (input_shape[0], self.output_dim * self.num_mix + 2*self.num_mix)
+
+    def get_config(self):
+        config = {
+            "output_dimension": self.output_dim,
+            "num_mixtures": self.num_mix
+        }
+        base_config = super(MDNSimp, self).get_config()
+        return dict(list(base_config.items()) + list(config.items()))
 
 
 def get_mixture_loss_func(output_dim, num_mixes):

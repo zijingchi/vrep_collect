@@ -68,7 +68,7 @@ class UR5GRUPolicy(UR5WithCameraSample):
             x3 = self._adddim(self.obstacle_pos)
             x4 = self._adddim(self.obstacle_ori)
             action = self.model.predict([x1, x2, x3, x4])
-            action = np.deg2rad(action[0])
+            action = self._model_output_process(action, thresh)
 
             self._make_action(action)   # make the action
 
@@ -114,6 +114,13 @@ class UR5GRUPolicy(UR5WithCameraSample):
 
         return action, expert_action, check
 
+    def _model_output_process(self, out, thresh):
+        action = np.concatenate((out[0], np.zeros(2)))
+        #action = np.deg2rad(action)
+        action = 1.2 * action + 1. * thresh * (self.target_joint_pos - self.observation['joint']) / config_dis(
+            self.target_joint_pos, self.observation['joint'])
+        return action
+
     def reset(self):
         if self.sim_running:
             self.stop_simulation()
@@ -121,8 +128,8 @@ class UR5GRUPolicy(UR5WithCameraSample):
             self.stop_simulation()
 
         self.init_joint_pos = np.array([0, -pi / 12, -3 * pi / 4, 0, pi / 2])
-        init_w = [0.6, 0.3, 0.3, 0.5, 0.5]
-        for i in range(len(self.init_joint_pos) - 1):
+        init_w = [0.5, 0.2, 0.2, 0.4, 0.4]
+        for i in range(len(self.init_joint_pos)):
             self.init_joint_pos[i] = self.init_joint_pos[i] + init_w[i] * np.random.randn()
 
         self.target_joint_pos = np.array([0.2 * np.random.randn(), 0.1 * np.random.randn() - pi / 3,
@@ -175,7 +182,7 @@ def main(args):
     homepath = path0[:path0.find('/', hi)]
     workpath = homepath+'/vdp/4_8/'
     path1 = path0[:path0.rfind('/')]
-    model_path = os.path.join(path1, 'train/h5files/lstm_weight_mid3.h5')
+    model_path = os.path.join(path1, 'train/h5files/lstm_weight_mid2.h5')
     if not os.path.exists(workpath):
         os.mkdir(workpath)
     dirlist = os.listdir(workpath)
@@ -217,6 +224,7 @@ def main(args):
             if len(obs) != 0:
                 with open(str(i) + '/data.pkl', 'wb') as f:
                     pickle.dump(data, f)
+            i = i + 1
         else:
             print("collision at initial or target pose")
     # print("Episode finished after {} timesteps.\tTotal reward: {}".format(t+1,total_reward))

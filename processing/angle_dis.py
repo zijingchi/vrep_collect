@@ -66,5 +66,8 @@ def obs_pt2(pos, ori):
 
 
 def cal_avo_dir(action, tar, cur, thresh, dof):
-    avo = action - thresh*(tar - cur)/config_dis(tar, cur)
+    #avo = action - config_dis(action, np.zeros(5))*(tar - cur)/config_dis(tar, cur)
+    avo = action - thresh * (tar - cur) / config_dis(tar, cur)
+    #print(config_dis(action, np.zeros(5)))
+    #avo = action - thresh * (tar - cur) / np.linalg.norm(tar[:dof]-cur[:dof])
     return avo[:dof]

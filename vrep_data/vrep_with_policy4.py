@@ -3,19 +3,19 @@ import os
 import cv2
 import time
 import pickle
-from train.train_mdn1 import model_with_latentspace_mdn
-from processing.angle_dis import obs_pt2, config_dis
+from keras.models import load_model
+from train.rnntest import lstm_test
+from processing.angle_dis import config_dis
 from vrep_data.collect_from_vrep1 import UR5WithCameraSample
-from processing.fknodes import tipcoor
-from train.mdn import *
+from train.mdn import sample_from_output
 import numpy as np
 
 pi = np.pi
 
 
-class MDN_policy(UR5WithCameraSample):
+class UR5GRUPolicy(UR5WithCameraSample):
     """
-    mdn policy execution class
+    rnn mdn policy execution class
     """
     metadata = {'render.modes': [], }
 
@@ -24,8 +24,9 @@ class MDN_policy(UR5WithCameraSample):
             server_addr='127.0.0.1',
             server_port=19997,
             scene_path=None,
-            modelweights=None,
-            askvrep=True
+            modelfile=None,
+            askvrep=True,
+            maxstep=8
     ):
 
         UR5WithCameraSample.__init__(
@@ -35,42 +36,44 @@ class MDN_policy(UR5WithCameraSample):
             scene_path,
         )
 
-        self.model = model_with_latentspace_mdn(3)
-        self.model.load_weights(modelweights)
-        self.askvrep = askvrep
-        print('UR5VrepEnv: initialized')
+        self.model = None
+        self.maxstep = maxstep
+        self.askvrep=askvrep
+        if modelfile:
+            self.model = lstm_test(5, maxstep, 0)
+            self.model.load_weights(modelfile)
 
-    def _cal_depth(self, chandle, zfar, znear):
-        depmat = self.obj_get_depth_matrix(chandle)
-        depmat = znear * np.ones(np.shape(depmat)) + (zfar - znear) * depmat
-        return depmat
+        print('UR5GRUPolicy: initialized')
 
     def _adddim(self, nparray):
-        newa = np.empty(tuple([1]) + nparray.shape, float)
+        newa = np.empty(tuple([1])+nparray.shape, float)
         newa[0] = nparray
         return newa
 
     def _model_input(self):
-        x1 = self._adddim(self.observation['joint'][:])
-        x2 = self._adddim(self.target_joint_pos[:])
+        x1 = self._adddim(self.current_states)
+        x2 = self._adddim(self.target_joint_pos)
         x3 = self._adddim(self.obstacle_pos)
         x4 = self._adddim(self.obstacle_ori)
         return [x1, x2, x3, x4]
 
     def _model_output_process(self, out):
-        action = sample_from_output(out, 3, 10, 1, 0.2)
-        action = np.concatenate((action, np.zeros(2)))
-        action = 1.2*np.deg2rad(action)
-        tar = self.target_joint_pos
+        action = sample_from_output(out, 5, 15, 1, 0.2)
+        '''tar = self.target_joint_pos
         cur = self.observation['joint']
-        action = action + 0.1*(tar - cur)/config_dis(tar, cur)
+        action = action + config_dis(action, np.zeros(5))*(tar - cur)/config_dis(tar, cur)'''
         return action
 
     def step(self, t):
-        self._make_observation()  # make an observation
+        self._make_observation()    # make an observation
         action = np.zeros(5)
         # predict the action from the model
         config = self.observation['joint']
+        if t < self.maxstep:
+            self.current_states[t] = config
+        else:
+            self.current_states[:self.maxstep-1, ] = self.current_states[1:, ]
+            self.current_states[self.maxstep-1, ] = config
         emptyBuff = bytearray()
         thresh = 0.1
         if self.model:
@@ -78,20 +81,15 @@ class MDN_policy(UR5WithCameraSample):
             action = self.model.predict(model_input)
             action = self._model_output_process(action)
 
-            self._make_action(action)  # make the action
-            self.step_simulation()
+            self._make_action(action)   # make the action
 
         colcheck = self._checkInitCollision(self.cID, emptyBuff)
         amp_between = config_dis(self.target_joint_pos, config)
         expert_action = []
-        check1 = amp_between < thresh
-        check2 = colcheck == 1
-        check = 0
-        if check1:
-            check = 1
+        check = (amp_between < thresh) or (colcheck == 1)
+        if amp_between < thresh:
             print('reaching')
-        if check2:
-            check = 2
+        if colcheck == 1:
             print('colliding')
 
         if self.askvrep:
@@ -114,12 +112,14 @@ class MDN_policy(UR5WithCameraSample):
             else:
                 print('no')
 
-            check3 = len(expert_action) == 0
-            if check3:
-                check = 3
-                print('expert action not found')
-            # else:
-            #    self._make_action(expert_action)
+            check = (amp_between < thresh) or (colcheck == 1) or (expert_action == [])
+            if check:
+                if amp_between < thresh:
+                    print('reaching')
+                if colcheck == 1:
+                    print('colliding')
+                if expert_action == []:
+                    print('expert action not found')
 
         self.step_simulation()
 
@@ -132,8 +132,8 @@ class MDN_policy(UR5WithCameraSample):
             self.stop_simulation()
 
         self.init_joint_pos = np.array([0, -pi / 12, -3 * pi / 4, 0, pi / 2])
-        init_w = [0.4, 0.1, 0.1, 0.5, 0.5]
-        for i in range(len(self.init_joint_pos) - 1):
+        init_w = [0.5, 0.2, 0.2, 0.4, 0.4]
+        for i in range(len(self.init_joint_pos)):
             self.init_joint_pos[i] = self.init_joint_pos[i] + init_w[i] * np.random.randn()
 
         self.target_joint_pos = np.array([0.2 * np.random.randn(), 0.1 * np.random.randn() - pi / 3,
@@ -148,7 +148,8 @@ class MDN_policy(UR5WithCameraSample):
                       'obstacle_ori': self.obstacle_ori}
         self.step_simulation()
         if colcheck == 1:
-            self.current_state = self.init_joint_pos
+            self.current_states = np.zeros((self.maxstep, 5))
+            self.current_states[0] = self.init_joint_pos
             self.set_joints(self.init_joint_pos)
             self.step_simulation()
 
@@ -157,17 +158,14 @@ class MDN_policy(UR5WithCameraSample):
     def render(self, mode='human', close=False):
         pass
 
-    def calAngDis(self, angles, targetangles):
-        return np.linalg.norm(angles - targetangles)
-
 
 def main(args):
     path0 = os.getcwd()
     hi = path0.find('home') + 5
     homepath = path0[:path0.find('/', hi)]
-    workpath = homepath + '/vdp/4_6/'
+    workpath = homepath+'/vdp/4_8/'
     path1 = path0[:path0.rfind('/')]
-    model_path = os.path.join(path1, 'train/h5files/mdn_weight_4_7_7_check.h5')
+    model_path = os.path.join(path1, 'train/h5files/lstm_model4.h5')
     if not os.path.exists(workpath):
         os.mkdir(workpath)
     dirlist = os.listdir(workpath)
@@ -178,40 +176,37 @@ def main(args):
         maxdir = max(numlist)
     os.chdir(workpath)
     askvrep = False
-    env = MDN_policy(modelweights=model_path,
-                     askvrep=askvrep)
+    env = UR5GRUPolicy(modelfile=model_path, askvrep=askvrep, maxstep=10)
     i = maxdir + 1
-    success = 0
-    dsuccess = 0
-    for d in dirlist:
+    while i < maxdir + 200:
         print('iter:', i)
-        datapkl = d + '/data.pkl'
-        if not os.path.exists(datapkl):
-            print('not exist')
-            continue
-        with open(datapkl, 'rb') as f0:
-            data = pickle.load(f0)
-            tar = data['inits']['target_joint_pos']
-            obs_pos = data['inits']['obstacle_pos']
-            obs_ori = data['inits']['obstacle_ori']
-            init_pos = data['observations'][0]
-        collision = env.reset2(tar, init_pos, obs_pos, obs_ori)
+        collision = env.reset()
         if collision:
-            check = -1
-            for t in range(100):
+            if not os.path.exists(os.path.join(workpath, str(i))):
+                os.mkdir(str(i))
+                os.mkdir(str(i) + '/img1')
+                os.mkdir(str(i) + '/img2')
+            obs = []
+            acs = []
+            exp_acs = []
+            for t in range(80):
                 action, expert_action, check = env.step(t)
                 if check:
                     break
-
-            if check == 0:
-                print('time end')
-            elif check == 1:
-                success = success + 1
-            print('policy success rate:', success / (i - maxdir))
-            dcheck = env.directly_towards(40)
-            if dcheck == 0:
-                dsuccess = dsuccess + 1
-            print('linear path success rate:', dsuccess / (i - maxdir))
+                obs.append(env.observation['joint'])
+                cv2.imwrite(str(i) + '/img1/' + str(t) + '.jpg', env.observation['image1'])
+                cv2.imwrite(str(i) + '/img2/' + str(t) + '.jpg', env.observation['image2'])
+                acs.append(action)
+                if askvrep:
+                    exp_acs.append(expert_action)
+                env.current_state = env.observation['joint']
+            if askvrep:
+                data = {'inits': env.inits, 'observations': obs, 'actions': exp_acs, 'policy': acs}
+            else:
+                data = {'inits': env.inits, 'observations': obs, 'actions': acs}
+            if len(obs) != 0:
+                with open(str(i) + '/data.pkl', 'wb') as f:
+                    pickle.dump(data, f)
             i = i + 1
         else:
             print("collision at initial or target pose")

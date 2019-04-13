@@ -38,6 +38,7 @@ class ReadDataBase(object):
     def load(self, subdir, rad2deg=False):
         pass
 
+
 class DataFromPkl(ReadDataBase):
 
     def __init__(self, dataset_path, data_num):
@@ -131,15 +132,17 @@ class DataFromDirPkl(object):
 
         return ni
 
-    def configs_sequence(self, maxsize, n):
+    def configs_sequence(self, maxsize, n, padding_order='pre'):
         dof = self.configs[0].size
         zlist = self.sequence_maxsize(maxsize, n)
         configs = np.zeros((n, maxsize, dof))
         #lens = []
         for i in range(n):
             for j, s in enumerate(zlist[i]):
-                #configs[i, j, ] = self.configs[s]
-                configs[i, maxsize-1-j,] = self.configs[s]
+                if padding_order == 'post':
+                    configs[i, j, ] = self.configs[s]
+                elif padding_order == 'pre':
+                    configs[i, maxsize-1-j,] = self.configs[s]
         return configs
 
     def sequence_maxsize(self, maxsize, n):

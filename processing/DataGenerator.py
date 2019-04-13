@@ -85,17 +85,17 @@ class CustomDataGenWthTarCfg(keras.utils.Sequence):
 
     def __data_generation(self, list_IDs_temp):
         dof = self.data_size
-        configs = np.empty((self.batch_size, dof), dtype=float)
+        configs = np.empty((self.batch_size, 5), dtype=float)
         actions = np.empty((self.batch_size, dof), dtype=float)
-        tar_pos_config = np.empty((self.batch_size, dof), dtype=float)
+        tar_pos_config = np.empty((self.batch_size, 5), dtype=float)
         #obstacle = np.empty((self.batch_size, 8, 3), dtype=float)
         obstacle_pos = np.empty((self.batch_size, 3), dtype=float)
         obstacle_ori = np.empty((self.batch_size, 3), dtype=float)
 
         for i, ID in enumerate(list_IDs_temp):
             obs, act = self.datafromindex.read_per_index(ID)
-            configs[i,] = obs['config'][:dof]
-            tar_pos_config[i,] = obs['tar_pos'][:dof]
+            configs[i,] = obs['config'][:5]
+            tar_pos_config[i,] = obs['tar_pos'][:5]
             obstacle_pos[i,] = obs['obstacle_pos']
             obstacle_ori[i,] = obs['obstacle_ori']
             avo = cal_avo_dir(act, obs['tar_pos'], obs['config'], 0.1, dof)
@@ -137,22 +137,29 @@ class CustomDataGenWthTarCfgSqc(keras.utils.Sequence):
 
     def __data_generation(self, list_IDs_temp):
         dof = self.dof
-        actions = np.empty((0, 3), float)
-        tar_joint_pos = np.empty((0, dof), float)
+        actions = np.empty((0, dof), float)
+        tar_joint_pos = np.empty((0, 5), float)
         obs_pos = np.empty((0, 3), float)
         obs_ori = np.empty((0, 3), float)
-        configs_sequence = np.empty((0, self.maxstep, dof), float)
+        configs_sequence = np.empty((0, self.maxstep, 5), float)
         for i, ID in enumerate(list_IDs_temp):
             ni = self.dataloader.load(ID)
-            configs = self.dataloader.configs_sequence(self.maxstep, ni)
+            configs = self.dataloader.configs_sequence(self.maxstep, ni, padding_order='post')
             acs = self.dataloader.actions
-            tar = self.dataloader.tar_pos[0]
-            for j in range(ni):
-                acs[j] = cal_avo_dir(acs[j], tar, self.dataloader.configs[j], 0.1, 5)
-            actions = np.append(actions, acs[:, :3], 0)
+            #tar = self.dataloader.tar_pos[0]
+            '''for j in range(ni):
+                acs[j] = cal_avo_dir(acs[j], tar, self.dataloader.configs[j], 0.1, 5)'''
+            actions = np.append(actions, acs, 0)
             tar_joint_pos = np.append(tar_joint_pos, self.dataloader.tar_pos, 0)
             obs_pos = np.append(obs_pos, self.dataloader.obstacle_pos, 0)
             obs_ori = np.append(obs_ori, self.dataloader.obstacle_ori, 0)
             configs_sequence = np.append(configs_sequence, configs, 0)
 
         return [configs_sequence, tar_joint_pos, obs_pos, obs_ori], actions
+
+
+def sph_theta_phi(nparray):
+    nparray = nparray/np.linalg.norm(nparray)
+    phi = np.arccos(nparray[2])
+    theta = np.arccos(nparray[0]/np.sin(phi))
+    return np.array([theta, phi])

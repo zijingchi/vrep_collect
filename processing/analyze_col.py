@@ -2,6 +2,8 @@ import pickle
 import numpy as np
 import os
 import re
+from mpl_toolkits.mplot3d import Axes3D
+import matplotlib.pyplot as plt
 
 
 class AnalyzeCol(object):
@@ -20,7 +22,7 @@ class AnalyzeCol(object):
             elif file == 'obs.pkl':
                 obs_files = file
 
-        if obs_files and states_files:
+        if not (obs_files and states_files):
             raise FileExistsError('file not exist')
 
         self.files = col_files
@@ -48,3 +50,26 @@ class AnalyzeCol(object):
 
         self.all_col_states = all_col_states
 
+
+def main():
+    datapath = '/home/ubuntu/vdp/colstates/0'
+    ac = AnalyzeCol(datapath)
+    col_state1, i1 = ac.load_col_states(ac.files[37])
+    states = ac.load_pkl('states.pkl')
+    cs = states[col_state1]
+    fig1 = plt.figure(1)
+    ax = Axes3D(fig1)
+    ax.scatter(cs[:, 0], cs[:, 1], cs[:, 2])
+    ax.set_xlabel('theta_1')
+    ax.set_xbound(-1,1)
+    ax.set_ylabel('theta_2')
+    ax.set_ybound(-1.2,0.4)
+    ax.set_zlabel('theta_3')
+    ax.set_zbound(-2.7,0)
+    '''fig = plt.figure()
+    plt.scatter(states[:,1],states[:,2])'''
+    plt.show()
+
+
+if __name__ == '__main__':
+    main()

@@ -5,11 +5,14 @@ import tensorflow as tf
 import keras.backend as K
 from keras.models import Model, Sequential
 from keras.layers import BatchNormalization, Concatenate, Dense, Input, Activation, TimeDistributed, GRU, Masking, LSTM, Dropout
-from keras.callbacks import TensorBoard, ModelCheckpoint
+from keras.callbacks import TensorBoard, ModelCheckpoint, EarlyStopping
 from keras.utils import plot_model
 from keras import optimizers, losses, regularizers
 from processing.angle_dis import metrics
 from processing.DataGenerator import CustomDataGenWthTarCfgSqc
+from train.mdn import *
+
+N_MIXES = 15
 
 
 def config_process(name):
@@ -19,7 +22,7 @@ def config_process(name):
         model.add(BatchNormalization(name='config_bn1'))
         model.add(Activation('relu', name='config_relu1'))
         model.add(Dense(256, activation='relu', name='config_dense2'))
-        model.add(Dense(128, activation='relu', name='config_dense3'))
+        model.add(Dense(256, activation='relu', name='config_dense3'))
     return model
 
 
@@ -45,15 +48,15 @@ def static_state(dof, l1_regu):
     x2 = BatchNormalization(name='obs_bn1')(x2)
     x2 = Activation('relu', name='obs_relu1')(x2)
     x2 = Dense(256, activation='relu', name='obs_dense2')(x2)
-    x2 = Dense(128, activation='relu', name='obs_dense3')(x2)
+    x2 = Dense(256, activation='relu', name='obs_dense3')(x2)
 
     target_process = config_process('target')
     target_h = target_process(target)
     merge1 = Concatenate(name='h0_merge')([x2, target_h])
-    h0 = Dense(256, kernel_regularizer=regularizers.l1(l1_regu), name='h0_dense1')(merge1)
+    h0 = Dense(512, kernel_regularizer=regularizers.l1(l1_regu), name='h0_dense1')(merge1)
     h0 = BatchNormalization(name='h0_bn1')(h0)
     h0 = Activation('relu', name='h0_relu1')(h0)
-    h0 = Dense(256, activation='relu', name='h0_dense2')(h0)
+    h0 = Dense(512, activation='relu', name='h0_dense2')(h0)
 
     model = Model(inputs=[target, obstacle_pos, obstacle_ori],
                   outputs=h0)
@@ -78,23 +81,33 @@ def gru_test(dof, maxstep, l1_regu):
     return model
 
 
-def lstm_test(dof, maxstep, l1_regu):
+def lstm_unit(dof, maxstep, l1_regu):
     configs = Input(shape=(maxstep, dof,), name='configs')
     target = Input(shape=(dof,), name='target')
+    obstacle_pos = Input(shape=(3,), name='obstacle_pos')
+    obstacle_ori = Input(shape=(3,), name='obstacle_ori')
+
+
+def lstm_test(dof, maxstep, l1_regu):
+    configs = Input(shape=(maxstep, 5,), name='configs')
+    target = Input(shape=(5,), name='target')
     obstacle_pos = Input(shape=(3,), name='obstacle_pos')
     obstacle_ori = Input(shape=(3,), name='obstacle_ori')
 
     h0 = static_state(dof, l1_regu)([target, obstacle_pos, obstacle_ori])
     configs_m = Masking(mask_value=0., name='masking')(configs)
     configs_h = TimeDistributed(config_process('configs'))(configs_m)
-    out = LSTM(128, name='lstm1')(configs_h, initial_state=[h0[:, :128], h0[:, 128:]])
-    #out = LSTM(128, name='lstm2')(out)
-    out = Dense(64, name='out_dense1')(out)
+    out = LSTM(256, name='lstm1', return_sequences=True)(configs_h, initial_state=[h0[:, :256], h0[:, 256:]])
+    out = LSTM(256, name='lstm2')(out)
+    out = Dense(200, name='out_dense1')(out)
     out = Dropout(0.5, name='dropout')(out)
-    out = Dense(3, name='output')(out)
-
+    #out = Dense(3, name='output')(out)
+    params = MDN(dof, N_MIXES)(out)
     model = Model(inputs=[configs, target, obstacle_pos, obstacle_ori],
-                  outputs=out)
+                  outputs=params)
+    '''model = Model(inputs=[configs, target, obstacle_pos, obstacle_ori],
+                  outputs=out)'''
+    plot_model(model, to_file='lstm_model2.jpg')
     return model
 
 
@@ -111,12 +124,18 @@ def weighted_logcosh(y_true, y_pred):
 
 def train_with_generator(datapath, batch_size, epochs, maxstep, dof):
     l1_regu = 1e-5
-    model = lstm_test(dof, maxstep, l1_regu)
+    learning_rate = 6e-4
+    lr_decay = 3e-3
+    '''model = lstm_test(dof, maxstep, l1_regu)
     model.compile(loss=losses.logcosh,
                   optimizer=optimizers.Adam(lr=1e-3, beta_1=0.9, beta_2=0.999, decay=1e-3),
-                  metrics=['mse'])
+                  metrics=['mse'])'''
+    model = lstm_test(dof, maxstep, l1_regu)
+    model.compile(loss=get_mixture_loss_func(dof, N_MIXES),
+                  optimizer=optimizers.Adam(lr=learning_rate, beta_1=0.9, beta_2=0.999, decay=lr_decay),
+                  metrics=[get_mixture_mse_accuracy(dof, N_MIXES)])
     #model.load_weights('./h5files/gru_weight_mid3.h5')
-    #plot_model(model, to_file='gru_model1.jpg')
+
     with open(os.path.join(datapath, 'seqlist1.pkl'), 'rb') as f:
         lists = pickle.load(f)
         train_list = lists['train']
@@ -131,17 +150,18 @@ def train_with_generator(datapath, batch_size, epochs, maxstep, dof):
                                          dof=dof,
                                          max_step=maxstep,
                                          batch_size=batch_size)
-    checkpoint = ModelCheckpoint(filepath='./h5files/lstm_weight_mid2.h5', monitor='val_mean_squared_error',
+    checkpoint = ModelCheckpoint(filepath='./h5files/lstm_weight_mid4.h5', monitor='val_mean_squared_error',
                                  save_best_only=True, save_weights_only=True, mode='min')
+    early_stop = EarlyStopping(monitor='val_mse_func', min_delta=0.003, patience=10, mode='auto')
     model.fit_generator(generator=train_gen,
                         epochs=epochs,
                         validation_data=vali_gen,
                         use_multiprocessing=True,
-                        callbacks=[TensorBoard(log_dir='./tensorboard_logs/lstm2/log'), checkpoint],
+                        callbacks=[TensorBoard(log_dir='./tensorboard_logs/lstm4/log'), checkpoint, early_stop],
                         workers=3)
-    model.save('./h5files/lstm_model2.h5')
+    model.save('./h5files/lstm_model4.h5')
 
 
 if __name__ == '__main__':
     datapath = '/home/ubuntu/vdp/4_7'
-    train_with_generator(datapath, 10, 200, 8, 5)
+    train_with_generator(datapath, 10, 200, 10, 5)
