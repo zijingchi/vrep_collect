@@ -182,6 +182,19 @@ class DataPack(object):
         return select_observations, select_actions
 
 
+def anglize(vector3d):
+    vector3d = vector3d/np.linalg.norm(vector3d)
+    phi = np.arccos(vector3d[2])
+    theta = np.arctan2(vector3d[1]/np.sin(phi), vector3d[0]/np.sin(phi))
+    return np.array([theta, phi])
+
+
+def deanglize(vector2d):
+    return np.array([np.sin(vector2d[1])*np.cos(vector2d[0]),
+                     np.sin(vector2d[1])*np.sin(vector2d[0]),
+                     np.cos(vector2d[1])])
+
+
 class DataFromIndex(object):
 
     def __init__(self, path, rad2deg=False, load_depth=False, load_img=False):
@@ -193,6 +206,17 @@ class DataFromIndex(object):
         self.load_img = load_img
         # self.selected_obs = {}
         # self.selected_act = {}
+
+    def load_all_indexes(self):
+        subdirs = os.listdir(self.path)
+        allindexes = []
+        for d in subdirs:
+            pd = os.path.join(self.path, d, 'data.pkl')
+            if os.path.exists(pd):
+                with open(pd, 'rb') as f:
+                    data = pickle.load(f)
+                    allindexes.extend([d+'-'+str(i) for i in range(len(data['actions']))])
+        return allindexes
 
     def read_per_index(self, index):
         reindex = re.split('\W', index)
@@ -216,12 +240,15 @@ class DataFromIndex(object):
             inits = pkl_data['inits']
             obs = pkl_data['observations']
             # config = obs[t]['joint']
+
             config = obs[t]
             tar_pos = inits['target_joint_pos']
             if self.load_depth:
                 observation['depth'] = obs[t]['depth']
             obstacle_pos = inits['obstacle_pos']
-            obstacle_ori = inits['obstacle_ori']
+            #obstacle_ori = inits['obstacle_ori']
+            xyzs = tipcoor(config)[3:-3]
+            obs_final = np.concatenate((config, tar_pos, obstacle_pos, xyzs))
             if flagd:
                 dagger_pkl = os.path.join(datadir, 'dagger.pkl')
                 with open(dagger_pkl, 'rb') as dagger_file:
@@ -234,17 +261,89 @@ class DataFromIndex(object):
                     action = actions[-1]
                     config = obs[t+1]-action
 
+        #action = anglize(action[:3])
+        #action = cal_avo_dir(action, tar_pos, config, 0.1, 5)
+        #action = action / 0.04
+        #newa = []
+        #for i in range(3):
+        #    newa.append(min(max(round(action[i]), -3), 3))
+        #newa = np.clip(np.round(action), -3, 3)
+
         if self.rad2deg:
             #config = np.rad2deg(config)
             #tar_pos = np.rad2deg(tar_pos)
             #obstacle_ori = np.rad2deg(obstacle_ori)
             action = np.rad2deg(action)
 
-        observation['config'] = config
-        observation['tar_pos'] = tar_pos
-        observation['obstacle_pos'] = obstacle_pos
-        observation['obstacle_ori'] = obstacle_ori
+        observation['config'] = obs_final
+        #observation['tar_pos'] = tar_pos
+        #observation['obstacle_pos'] = obstacle_pos
+        #observation['obstacle_ori'] = obstacle_ori
         return observation, action
+
+    def read_from_indexes(self, indexes):
+        selected_obs = {}
+        selected_act = {}
+        for index in indexes:
+            obs, act = self.read_per_index(index)
+            selected_obs[index] = obs
+            selected_act[index] = act
+        return selected_obs, selected_act
+
+
+from processing.fknodes import tipcoor
+from processing.angle_dis import cal_avo_dir
+
+
+class DataFromIndexImgLike(DataFromIndex):
+
+    def __init__(self, path, rad2deg=False, load_depth=False, load_img=False):
+        super(DataFromIndexImgLike, self).__init__(path, rad2deg, load_depth, load_img)
+
+
+    def read_per_index(self, index):
+        reindex = re.split('\W', index)
+        dirname = reindex[0]
+        datadir = os.path.join(self.path, dirname)
+        t = int(reindex[1])
+        pkl_path = os.path.join(datadir, 'data.pkl')
+        img1_path = os.path.join(datadir, 'img1/' + reindex[1] + '.jpg')
+        img2_path = os.path.join(datadir, 'img2/' + reindex[1] + '.jpg')
+        observation = {}
+        action = []
+        if self.load_img:
+            img1 = cv2.imread(img1_path)
+            img2 = cv2.imread(img2_path)
+            observation['img1'] = img1
+            observation['img2'] = img2
+        with open(pkl_path, 'rb') as pkl_file:
+            pkl_data = pickle.load(pkl_file)
+            inits = pkl_data['inits']
+            obs = pkl_data['observations']
+            # config = obs[t]['joint']
+            config = obs[t]
+            tar_pos = inits['target_joint_pos']
+            if self.load_depth:
+                observation['depth'] = obs[t]['depth']
+            obstacle_pos = inits['obstacle_pos']
+            matrix = np.zeros((5, 5))
+            matrix[0, :] = config
+            matrix[1, :] = tar_pos
+            matrix[2:, 0] = obstacle_pos
+            xyzs = tipcoor(config)[3:-3]
+            matrix[2:, 1:] = xyzs.reshape((-1, 3)).T
+            actions = pkl_data['actions']
+            action = actions[t]
+            action = cal_avo_dir(action, tar_pos, config, 0.1, 3)
+            action = action / 0.05
+            newa = 0
+            for i in range(3):
+                newa += (min(2, max(-2, round(action[i]))) + 2) * 5 ** (2 - i)
+        if self.rad2deg:
+            action = np.rad2deg(action)
+
+        observation['matrix'] = matrix
+        return observation, newa
 
     def read_from_indexes(self, indexes):
         selected_obs = {}

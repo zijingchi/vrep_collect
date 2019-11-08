@@ -65,6 +65,29 @@ def obs_pt2(pos, ori):
     return PafterT
 
 
+def obs_pt_big(pos, ori):
+    s = 0.05
+    l = 0.51
+    h = 0.2
+    deta = 1e-2
+    n1, n2, n3 = int(s/deta)+1, int(l/deta)+1, int(h/deta)+1
+    xs = np.linspace(-s/2, s/2, n1)
+    ys = np.linspace(-l/2, l/2, n2)
+    zs = np.linspace(-h/2, h/2, n3)
+    P = np.ones((4, n1*n2*n3))
+    i = 0
+    for i1, x in enumerate(xs):
+        for i2, y in enumerate(ys):
+            for i3, z in enumerate(zs):
+                P[:3, i] = np.array([xs[i1], ys[i2], zs[i3]])
+                i = i + 1
+    R = euler2rotm(ori)
+    pos.shape = (3, 1)
+    T = np.concatenate((R, pos), axis=1)
+    PafterT = T @ P
+    return PafterT.transpose()
+
+
 def cal_avo_dir(action, tar, cur, thresh, dof):
     #avo = action - config_dis(action, np.zeros(5))*(tar - cur)/config_dis(tar, cur)
     avo = action - thresh * (tar - cur) / config_dis(tar, cur)

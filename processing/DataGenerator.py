@@ -1,7 +1,8 @@
 import numpy as np
 import keras
 # import os
-from processing.readDataFromFile import DataFromIndex, DataFromDirPkl
+from processing.readDataFromFile import DataFromIndex, DataFromDirPkl, DataFromIndexImgLike
+from keras.utils.np_utils import to_categorical
 from processing.angle_dis import obs_pt2, cal_avo_dir
 from keras.preprocessing.sequence import pad_sequences
 
@@ -85,23 +86,27 @@ class CustomDataGenWthTarCfg(keras.utils.Sequence):
 
     def __data_generation(self, list_IDs_temp):
         dof = self.data_size
-        configs = np.empty((self.batch_size, 5), dtype=float)
-        actions = np.empty((self.batch_size, dof), dtype=float)
-        tar_pos_config = np.empty((self.batch_size, 5), dtype=float)
+        #configs = np.empty((self.batch_size, dof), dtype=float)
+        actions = np.empty((self.batch_size, 5), dtype=float)
+        #tar_pos_config = np.empty((self.batch_size, dof), dtype=float)
         #obstacle = np.empty((self.batch_size, 8, 3), dtype=float)
-        obstacle_pos = np.empty((self.batch_size, 3), dtype=float)
-        obstacle_ori = np.empty((self.batch_size, 3), dtype=float)
-
+        #obstacle_pos = np.empty((self.batch_size, 3), dtype=float)
+        #obstacle_ori = np.empty((self.batch_size, 3), dtype=float)
+        obs_final = np.empty((self.batch_size, 25), dtype=float)
         for i, ID in enumerate(list_IDs_temp):
             obs, act = self.datafromindex.read_per_index(ID)
-            configs[i,] = obs['config'][:5]
-            tar_pos_config[i,] = obs['tar_pos'][:5]
-            obstacle_pos[i,] = obs['obstacle_pos']
-            obstacle_ori[i,] = obs['obstacle_ori']
-            avo = cal_avo_dir(act, obs['tar_pos'], obs['config'], 0.1, dof)
-            actions[i,] = np.rad2deg(avo)
-
-        return [configs, tar_pos_config, obstacle_pos, obstacle_ori], actions
+            #configs[i,] = obs['config'][:dof]
+            #tar_pos_config[i,] = obs['tar_pos'][:dof]
+            #obstacle_pos[i,] = obs['obstacle_pos']
+            #obstacle_ori[i,] = obs['obstacle_ori']
+            obs_final[i,] = obs['config']
+            #avo = cal_avo_dir(act, obs['config'][5:10], obs['config'][:5], 0.1, dof)
+            actions[i,] = act
+            #actions[i, 7:14] = to_categorical(act[1], 7)
+            #actions[i, 14:] = to_categorical(act[2], 7)
+        #out = np.concatenate((configs, tar_pos_config, obstacle_pos, obstacle_ori), axis=-1)
+        #return [configs, tar_pos_config, obstacle_pos, obstacle_ori], actions
+        return obs_final, actions
 
 
 class CustomDataGenWthTarCfgSqc(keras.utils.Sequence):
@@ -156,6 +161,49 @@ class CustomDataGenWthTarCfgSqc(keras.utils.Sequence):
             configs_sequence = np.append(configs_sequence, configs, 0)
 
         return [configs_sequence, tar_joint_pos, obs_pos, obs_ori], actions
+
+
+class GenImgLike(keras.utils.Sequence):
+
+    def __init__(self, datapath, list_IDs, data_size, batch_size, shuffle=True):
+        self.batch_size = batch_size
+        self.data_size = data_size
+        self.datapath = datapath
+        self.datafromindex = DataFromIndexImgLike(datapath, rad2deg=False, load_img=False)
+        self.list_IDs = list_IDs
+        self.indexes = np.arange(len(self.list_IDs))
+        self.shuffle = shuffle
+        self.on_epoch_end()
+
+    def __len__(self):
+        """Denotes the number of batches per epoch"""
+        return int(np.floor(len(self.indexes) / self.batch_size))
+
+    def __getitem__(self, index):
+        """Generate one batch of data"""
+        indexes = self.indexes[index*self.batch_size:(index+1)*self.batch_size]
+        list_IDs_temp = [self.list_IDs[k] for k in indexes]
+        # Generate data
+        X, y = self.__data_generation(list_IDs_temp)
+        return X, y
+
+    def on_epoch_end(self):
+        """Updates indexes after each epoch"""
+        self.indexes = np.arange(len(self.list_IDs))
+        if self.shuffle == True:
+            np.random.shuffle(self.indexes)
+
+    def __data_generation(self, list_IDs_temp):
+        dof = self.data_size
+        actions = np.empty((self.batch_size), dtype=float)
+        matrix = np.empty((self.batch_size, 5, 5, 1), dtype=float)
+
+        for i, ID in enumerate(list_IDs_temp):
+            obs, act = self.datafromindex.read_per_index(ID)
+            matrix[i, :, :, 0] = obs['matrix']
+            actions[i] = act
+
+        return matrix, to_categorical(actions, 5**3)
 
 
 def sph_theta_phi(nparray):

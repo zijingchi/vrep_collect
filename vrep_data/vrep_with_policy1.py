@@ -51,8 +51,8 @@ class UR5DaggerSample(UR5WithCameraSample):
         return newa
 
     def _model_input(self):
-        x1 = self._adddim(self.observation['joint'][:])
-        x2 = self._adddim(self.target_joint_pos[:])
+        x1 = self._adddim(self.observation['joint'][:3])
+        x2 = self._adddim(self.target_joint_pos[:3])
         x3 = self._adddim(self.obstacle_pos)
         x4 = self._adddim(self.obstacle_ori)
         return [x1, x2, x3, x4]
@@ -60,7 +60,7 @@ class UR5DaggerSample(UR5WithCameraSample):
     def _model_output_process(self, out, thresh):
         action = np.concatenate((out[0], np.zeros(2)))
         action = np.deg2rad(action)
-        action = 1.2 * action + 1.1 * thresh * (self.target_joint_pos - self.observation['joint']) / config_dis(
+        action = 1.3 * action + 1.1 * thresh * (self.target_joint_pos - self.observation['joint']) / config_dis(
             self.target_joint_pos, self.observation['joint'])
         return action
 
@@ -82,7 +82,7 @@ class UR5DaggerSample(UR5WithCameraSample):
         if self.model:
             model_input = self._model_input()
             action = self.model.predict(model_input)
-            action = self._model_output_process(action, 0.1)
+            action = self._model_output_process(action, thresh)
 
             self._make_action(action)   # make the action
             self.step_simulation()
@@ -131,6 +131,22 @@ class UR5DaggerSample(UR5WithCameraSample):
 
         return action, expert_action, check
 
+    def cal_path_only(self):
+        self._make_observation()  # make an observation
+        config = self.observation['joint']
+        inFloats = config.tolist() + self.target_joint_pos.tolist()
+        minConfigs = int(100 * np.linalg.norm(self.target_joint_pos - config))
+        emptyBuff = bytearray()
+        n_path, path, res = self._calPathThroughVrep(self.cID, minConfigs, inFloats, emptyBuff)
+        if (res == 0) & (n_path != 0):
+            np_path = np.array(path)
+            re_path = np_path.reshape((n_path, 5))
+            return re_path
+        elif res == 3:
+            print('timeout')
+            time.sleep(6)
+            return []
+
     def reset(self):
         if self.sim_running:
             self.stop_simulation()
@@ -141,8 +157,6 @@ class UR5DaggerSample(UR5WithCameraSample):
         init_w = [0.4, 0.1, 0.1, 0.3, 0.3]
         for i in range(len(self.init_joint_pos) - 1):
             self.init_joint_pos[i] = self.init_joint_pos[i] + init_w[i] * np.random.randn()
-        # init joint angles in 4_3 is [0.03501453 -0.31228065 -2.353125    0.08101108  1.5707964]
-        # 0.6243724  -0.19614209 -2.1879761   0.37844387  1.5707964;[-0.3539194  -0.23868342 -2.3079748  -0.16912939  1.5707964 ]
 
         self.target_joint_pos = np.array([0.2*np.random.randn(), 0.1*np.random.randn()-pi/3,
         0.2*np.random.randn()-pi/3, 0.3*np.random.randn(), 0.2*np.random.randn()+pi/2])
@@ -171,7 +185,7 @@ def main(args):
     homepath = path0[:path0.find('/', hi)]
     workpath = homepath+'/vdp/4_6/'
     path1 = path0[:path0.rfind('/')]
-    model_path = os.path.join(path1, 'train/h5files/model_simple_check14.h5')
+    model_path = os.path.join(path1, 'train/h5files/3dof_model.h5')
     if not os.path.exists(workpath):
         os.mkdir(workpath)
     dirlist = os.listdir(workpath)
@@ -183,38 +197,50 @@ def main(args):
     os.chdir(workpath)
     askvrep = False
     env = UR5DaggerSample(modelfile=model_path, askvrep=askvrep)
-    i = 1
+    i = maxdir + 1
     success = 0
     dsuccess = 0
-    for d in dirlist:
-        print('iter:', d)
-        datapkl = d + '/data.pkl'
-        if not os.path.exists(datapkl):
-            print('not exist')
-            continue
-        with open(datapkl, 'rb') as f0:
-            data = pickle.load(f0)
-            tar = data['inits']['target_joint_pos']
-            obs_pos = data['inits']['obstacle_pos']
-            obs_ori = data['inits']['obstacle_ori']
-            init_pos = data['observations'][0]
-        collision = env.reset2(tar, init_pos, obs_pos, obs_ori)
-        if collision:
 
+    while i < maxdir + 11:
+        print('iter:', i)
+        collision = env.reset()
+        if collision:
+            if not os.path.exists(os.path.join(workpath, str(i))):
+                os.mkdir(str(i))
+                os.mkdir(str(i) + '/img1')
+                os.mkdir(str(i) + '/img2')
+            obs = []
+            acs = []
+            exp_acs = []
+            check = -1
             for t in range(100):
                 action, expert_action, check = env.step(t)
                 if check:
                     break
+                obs.append(env.observation['joint'])
+                cv2.imwrite(str(i)+'/img1/'+str(t)+'.jpg', env.observation['image1'])
+                cv2.imwrite(str(i)+'/img2/'+str(t)+'.jpg', env.observation['image2'])
+                acs.append(action)
+                if askvrep:
+                    exp_acs.append(expert_action)
+                env.current_state = env.observation['joint']
+            if askvrep:
+                data = {'inits': env.inits, 'observations': obs, 'actions': exp_acs, 'policy': acs}
+            else:
+                data = {'inits': env.inits, 'observations': obs, 'actions': acs}
+            if len(obs) != 0:
+                with open(str(i)+'/data.pkl', 'wb') as f:
+                    pickle.dump(data, f)
 
             if check == 0:
                 print('time end')
             elif check == 1:
                 success = success + 1
-            print('policy success rate:', success/i)
+            print('policy success rate:', success/(i-maxdir))
             dcheck = env.directly_towards(40)
             if dcheck == 0:
                 dsuccess = dsuccess + 1
-            print('linear path success rate:', dsuccess/i)
+            print('linear path success rate:', dsuccess/(i-maxdir))
             i = i + 1
         else:
             print("collision at initial or target pose")

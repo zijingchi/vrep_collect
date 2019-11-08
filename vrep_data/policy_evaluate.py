@@ -76,16 +76,22 @@ class PolicyEva(UR5WithCameraSample):
 
 
 def main():
-    datapath = '/home/czj/vrep_path_dataset/2_1/'
+    datapath = '/home/czj/vrep_path_dataset/10/'
     os.chdir(datapath)
     env = PolicyEva(datapath=datapath)
     for s in env.subdirs:
         datapkl = os.path.join(s, 'data.pkl')
         if os.path.exists(datapkl):
             env.reset_config(datapkl)
-            n = len(env.expert_actions)
+            n = 40
+            sub = env.target_joint_pos - env.init_joint_pos
+            alist = [k * sub / n for k in range(n)]
+            #n = len(env.expert_actions)
             for i in range(n):
-                env.step(i)
+                #env.step(i)
+                env.set_joints(alist[i]+env.init_joint_pos)
+                env.step_simulation()
+                time.sleep(0.1)
 
 
 if __name__ == '__main__':

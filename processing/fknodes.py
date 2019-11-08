@@ -23,25 +23,25 @@ def fktensor(x):
     Q1 = tf.matmul(A0, A1)
     #t1 = Q1[:3, 3]
     Q2 = tf.matmul(Q1, A2)
-    t2 = Q2[:3, 3]
+    #t2 = Q2[:3, 3]
     Q3 = tf.matmul(Q2, A3)
-    t3 = Q3[:3, 3]
+    #t3 = Q3[:3, 3]
     Q4 = tf.matmul(Q3, A4)
-    t4 = Q4[:3, 3]
-    A34 = [[1., 0., 0., 0.], [0., 1., 0., 0.], [0., 0., 1., -0.1], [0., 0., 0., 1.]]
-    A34 = tf.convert_to_tensor(A34)
+    #t4 = Q4[:3, 3]
+    #A34 = [[1., 0., 0., 0.], [0., 1., 0., 0.], [0., 0., 1., -0.1], [0., 0., 0., 1.]]
+    #A34 = tf.convert_to_tensor(A34)
     """A34 = tf.SparseTensor(indices=[[0, 0], [1, 1], [2, 2], [3, 3], [2, 3]],
                           values=[1., 1., 1., 1., -0.1],
                           dense_shape=[4, 4])"""
-    Q34 = tf.matmul(Q4, A34)
-    t34 = Q34[:3, 3]
+    #Q34 = tf.matmul(Q4, A34)
+    #t34 = Q34[:3, 3]
     Q5 = tf.matmul(Q4, A5)
-    t5 = Q5[:3, 3]
+    #t5 = Q5[:3, 3]
     t6 = tf.constant([[0.], [-d6], [0.], [1.]])
     Q6 = tf.matmul(Q5, t6)
     t6 = Q6[:3, 0]
-    ps = tf.concat([t2, t3, t34, t4, t5, t6], axis=0)
-    return ps
+    #ps = tf.concat([t2, t3, t34, t4, t5, t6], axis=0)
+    return t6
 
 
 def urfka1(theta1, d1):
@@ -124,9 +124,10 @@ def ur5fk(thetas):
     d6 = 7.495e-2
     a2 = 4.251e-1
     a3 = 3.9215e-1
+    d0 = 0.3
     All = np.zeros((6, 4, 4))
     All[:, 3, 3] = 1
-    for i in range(6):
+    for i in range(5):
         All[i, 0, 0] = np.cos(thetas[i])
         All[i, 0, 1] = -np.sin(thetas[i])
     All[0, 1, 0] = np.sin(thetas[0])
@@ -162,17 +163,19 @@ def ur5fk(thetas):
     A0[1, 0] = -1
     A0[2, 2] = 1
     A0[3, 3] = 1
-    A0[2, 3] = 0
+    A0[2, 3] = d0
     return All, A0
 
 
 def tipcoor(thetas):
-    thetas_0 = np.array([0, pi / 2, 0, pi / 2, pi, 0])
+    thetas_0 = np.array([0, pi / 2, 0, pi / 2, pi])
     thetas = thetas + thetas_0
     All, A0 = ur5fk(thetas)
+    ps = []
     for A in All:
         A0 = A0 @ A
-    return A0[:3, 3]
+        ps.extend(A0[:3, 3])
+    return np.array(ps)
 
 
 def fklayer(x, n):

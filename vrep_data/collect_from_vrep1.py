@@ -102,7 +102,6 @@ class UR5WithCameraSample(vrep_env.VrepEnv):
 
     def _checkInitCollision(self, clientID, emptyBuff):
         """returns 1 if collision occurred, 0 otherwise"""
-        # todo: use get_collision_handle or read_collision instead
         res, retInts, path, retStrings, retBuffer = vrep.simxCallScriptFunction(clientID,
                             'Dummy', vrep.sim_scripttype_childscript, 'checkCollision',
                             [], [], [], emptyBuff, vrep.simx_opmode_oneshot_wait)
@@ -142,7 +141,6 @@ class UR5WithCameraSample(vrep_env.VrepEnv):
         colcheck1 = self._checkInitCollision(self.cID, emptyBuff)
         self.set_joints(self.init_joint_pos)
         colcheck2 = self._checkInitCollision(self.cID, emptyBuff)
-
         if ((colcheck1 == 0) & (colcheck2 == 0)):
             return 1
         else:
@@ -251,7 +249,7 @@ class UR5WithCameraSample(vrep_env.VrepEnv):
         while self.sim_running:
             self.stop_simulation()
 
-        self.init_joint_pos = np.array([0, -pi/12, -3 * pi / 4, 0, pi / 2])
+        self.init_joint_pos = np.array([0, -pi / 12, -3 * pi / 4, 0, pi / 2])
         init_w = [0.6, 0.3, 0.3, 0.5, 0.5]
         for i in range(len(self.init_joint_pos) - 1):
             self.init_joint_pos[i] = self.init_joint_pos[i] + init_w[i] * np.random.randn()
@@ -263,7 +261,7 @@ class UR5WithCameraSample(vrep_env.VrepEnv):
         self.start_simulation()
         found = False
 
-        colcheck = self.set_obs_pos()
+        colcheck = self.set_obs_pos2()
         self.inits = {'target_joint_pos': self.target_joint_pos,
                       'obstacle_pos': self.obstacle_pos,
                       'obstacle_ori': self.obstacle_ori}
@@ -314,7 +312,7 @@ def main(args):
     path0 = os.getcwd()
     hi = path0.find('home') + 5
     homepath = path0[:path0.find('/', hi)]
-    workpath = homepath + '/vdp/5_2/'
+    workpath = homepath + '/vdp/4_3/'
     if not os.path.exists(workpath):
         os.mkdir(workpath)
     dirlist = os.listdir(workpath)
@@ -326,7 +324,7 @@ def main(args):
     os.chdir(workpath)
     env = UR5WithCameraSample()
     i = maxdir + 1
-    while i < maxdir + 251:
+    while i < maxdir + 250:
         print('iter:', i)
         found = env.reset()
         if found:
