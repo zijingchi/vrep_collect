@@ -172,9 +172,12 @@ def tipcoor(thetas):
     thetas = thetas + thetas_0
     All, A0 = ur5fk(thetas)
     ps = []
-    for A in All:
+    for i, A in enumerate(All):
         A0 = A0 @ A
         ps.extend(A0[:3, 3])
+        if i==2 or i==3:
+            p = A0[:3, 3]-0.1*A0[:3, 2]
+            ps.extend(p)
     return np.array(ps)
 
 

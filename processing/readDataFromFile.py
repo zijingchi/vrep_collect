@@ -353,3 +353,4 @@ class DataFromIndexImgLike(DataFromIndex):
             selected_obs[index] = obs
             selected_act[index] = act
         return selected_obs, selected_act
+

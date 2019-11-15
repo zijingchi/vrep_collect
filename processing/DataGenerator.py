@@ -109,6 +109,53 @@ class CustomDataGenWthTarCfg(keras.utils.Sequence):
         return obs_final, actions
 
 
+class CustomDataGen4Pol(keras.utils.Sequence):
+
+    def __init__(self, datapath, list_IDs, batch_size, shuffle=True):
+        self.batch_size = batch_size
+        self.datapath = datapath
+        self.datafromindex = DataFromIndex(datapath, rad2deg=False, load_img=False)
+        self.list_IDs = list_IDs
+        self.indexes = np.arange(len(self.list_IDs))
+        self.shuffle = shuffle
+        self.on_epoch_end()
+
+    def __len__(self):
+        """Denotes the number of batches per epoch"""
+        return int(np.floor(len(self.indexes) / self.batch_size))
+
+    def __getitem__(self, index):
+        """Generate one batch of data"""
+        indexes = self.indexes[index*self.batch_size:(index+1)*self.batch_size]
+        list_IDs_temp = [self.list_IDs[k] for k in indexes]
+        # Generate data
+        X, y = self.__data_generation(list_IDs_temp)
+        return X, y
+
+    def on_epoch_end(self):
+        """Updates indexes after each epoch"""
+        self.indexes = np.arange(len(self.list_IDs))
+        if self.shuffle == True:
+            np.random.shuffle(self.indexes)
+
+    def __data_generation(self, list_IDs_temp):
+        actions = np.empty((self.batch_size, 5), dtype=float)
+        configs = np.empty((self.batch_size, 5), dtype=float)
+        goals = np.empty((self.batch_size, 5), dtype=float)
+        obs_pos = np.empty((self.batch_size, 3), dtype=float)
+        fks = np.empty((self.batch_size, 12), dtype=float)
+        for i, ID in enumerate(list_IDs_temp):
+            obs, act = self.datafromindex.read_per_index(ID)
+            obs = obs['config']
+            configs[i,] = obs[:5]
+            goals[i,] = obs[5:10]
+            obs_pos[i, ] = obs[10:13]
+            fks[i,] = obs[13:25]
+            actions[i,] = act
+
+        return [configs, goals, obs_pos, fks], actions
+
+
 class CustomDataGenWthTarCfgSqc(keras.utils.Sequence):
 
     def __init__(self, datapath, list_IDs, dof, max_step, batch_size, shuffle=True):

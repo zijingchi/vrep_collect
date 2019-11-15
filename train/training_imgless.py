@@ -260,7 +260,7 @@ def train_with_generator(datapath, batch_size, epochs, dof, model_type='straight
         model.compile(loss=losses.binary_crossentropy,
                       optimizer=optimizers.Adam(lr=1e-2, beta_1=0.9, beta_2=0.999, decay=1e-2),
                       metrics=[multiacc])
-    with open(os.path.join(datapath, 'list2.pkl'), 'rb') as f:
+    with open(os.path.join(datapath, 'list0.pkl'), 'rb') as f:
         lists = pickle.load(f)
         train_list = lists['train']
         vali_list = lists['test']

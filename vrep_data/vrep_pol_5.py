@@ -6,7 +6,7 @@ import pickle
 from gym import spaces
 from gym.utils import seeding
 #from keras.models import load_model
-#from train.imglike import mdnconstruct
+from train.keras_potential import construct_potential
 from train.training_imgless import simple_model
 from processing.angle_dis import config_dis
 from processing.fknodes import tipcoor
@@ -26,7 +26,7 @@ class UR5ValEnv(vrep_env.VrepEnv):
             server_port=19997,
             scene_path=None,
             random_seed=0,
-            l2_thresh=0.1,
+            l2_thresh=0.05,
             modelfile=None,
             dof=5,
             askvrep=False
@@ -64,7 +64,8 @@ class UR5ValEnv(vrep_env.VrepEnv):
         joint_space = np.ones(self.dof)
         self.action_space = spaces.Box(low=-0.1 * joint_space, high=0.1 * joint_space)
         # self._make_obs_space()
-        self.model = simple_model(5, 25)
+        #self.model = simple_model(5, 25)
+        self.model = construct_potential()
         self.seed(random_seed)
         if modelfile:
             self.model.load_weights(modelfile)
@@ -199,10 +200,18 @@ class UR5ValEnv(vrep_env.VrepEnv):
         action = ac/np.linalg.norm(ac)*self.l2_thresh
         return action
 
+    def _model_input(self):
+        x1 = np.expand_dims(self.observation[:5], 0)
+        x2 = np.expand_dims(self.observation[5:10], 0)
+        x3 = np.expand_dims(self.observation[10:13], 0)
+        x4 = np.expand_dims(self.observation[13:], 0)
+        return [x1, x2, x3, x4]
+
     def step(self, t):
         self._make_observation()
         #matrix = np.expand_dims(self._reshape_observation(), -1)
-        ac = self.model.predict(np.expand_dims(self.observation, 0))
+        #ac = self.model.predict(np.expand_dims(self.observation, 0))
+        ac = self.model.predict(self._model_input())
         ac = self._action_process(ac[0])
 
         cfg = self._config()
@@ -303,8 +312,8 @@ def main(args):
     #workpath = os.path.expanduser('~/Downloads/ur5expert3')
     path0 = os.getcwd()
     path1 = path0[:path0.rfind('/')]
-    model_path = os.path.join(path1, 'train/h5files/5dof_simple_norm_cpt3.h5')
-    ask_vrep = True
+    model_path = os.path.join(path1, 'train/h5files/pol_cpt1.h5')
+    ask_vrep = False
     env = UR5ValEnv(modelfile=model_path, askvrep=ask_vrep, random_seed=7, l2_thresh=0.1)
     save_path = './dagger'
     if not os.path.exists(save_path):
